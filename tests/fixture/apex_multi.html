@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8" /><title>Take the Assessment</title></head>
+<body>
+<main>
+  <h1>Take the Assessment</h1>
+  <div id="qwrap">
+    <h2 id="qhead">Question 1 of 2</h2>
+    <p id="qbody">Which two statements are true? (Choose Two)</p>
+    <div role="status">Choices - Choose two!</div>
+    <div id="opts">
+      <label><input type="checkbox" name="choice" /> SQL stands for Structured Query Language.</label>
+      <label><input type="checkbox" name="choice" /> NULL represents an unknown value.</label>
+      <label><input type="checkbox" name="choice" /> A primary key may contain duplicates.</label>
+      <label><input type="checkbox" name="choice" /> DELETE without WHERE removes all rows.</label>
+    </div>
+    <button type="button" id="submitBtn">Submit Answer</button>
+    <div id="result" role="alert" style="display:none"></div>
+  </div>
+  <div id="done" data-completion style="display:none">
+    <h2>Assessment Complete!</h2><p>You finished all questions.</p>
+  </div>
+<script>
+let idx = 0;
+// Correct answers are the FIRST TWO options of each question (mock solver picks those).
+const ANSWERS = [["opt-0", "opt-1"], ["opt-0", "opt-1"]];
+const HEADS = ["Question 1 of 2", "Question 2 of 2"];
+const BODIES = ["Which two statements are true? (Choose Two)", "Which two are DDL commands? (Choose Two)"];
+const OPTS = [
+  ["SQL stands for Structured Query Language.", "NULL represents an unknown value.",
+   "A primary key may contain duplicates.", "DELETE without WHERE removes all rows."],
+  ["CREATE creates objects.", "ALTER modifies objects.", "DROP queries data.", "SELECT deletes objects."],
+];
+const submitBtn = document.getElementById("submitBtn");
+const result = document.getElementById("result");
+function selectedIds() {
+  const boxes = document.querySelectorAll("#opts input[type=checkbox]");
+  const out = [];
+  boxes.forEach((b, i) => { if (b.checked) out.push("opt-" + i); });
+  return out.sort().join(",");
+}
+function render() {
+  document.getElementById("qhead").textContent = HEADS[idx];
+  document.getElementById("qbody").textContent = BODIES[idx];
+  document.getElementById("opts").innerHTML = OPTS[idx].map(t => `<label><input type="checkbox" name="choice" /> ${t}</label>`).join("");
+  result.style.display = "none";
+}
+submitBtn.addEventListener("click", () => {
+  if (selectedIds() === ANSWERS[idx].slice().sort().join(",")) {
+    result.style.display = "";
+    result.textContent = "Correct!";
+    submitBtn.disabled = true;
+    setTimeout(() => {
+      submitBtn.disabled = false;
+      idx++;
+      if (idx >= ANSWERS.length) {
+        document.getElementById("qwrap").style.display = "none";
+        document.getElementById("done").style.display = "";
+      } else render();
+    }, 300);
+  } else {
+    result.style.display = "";
+    result.textContent = "Incorrect, try again.";
+  }
+});
+</script>
+</main>
+</body>
+</html>

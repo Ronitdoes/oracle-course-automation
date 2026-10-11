@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8" /><title>Take the Assessment</title></head>
+<body>
+<main>
+  <h1>Take the Assessment</h1>
+  <div id="qwrap">
+    <h2>Question 5 of 5</h2>
+    <p>Which is quatloos? (final question)</p>
+    <div role="status">Choices - Just one correct!</div>
+    <div id="opts">
+      <div role="radio" tabindex="0" aria-checked="false">Capital of Assyria.</div>
+      <div role="radio" tabindex="0" aria-checked="false">A unit of quatloos.</div>
+    </div>
+    <button type="button" id="doneBtn">Complete Assessment</button>
+    <div id="modal" role="dialog" aria-label="Confirm submit" style="display:none">
+      <p>Are you sure you want to submit your assessment?</p>
+      <p>If so, click <b>Complete Assessment</b>.</p>
+      <button type="button" id="backBtn">Return to Assessment</button>
+      <button type="button" id="confirmBtn">Complete Assessment</button>
+    </div>
+  </div>
+  <div id="done" data-completion style="display:none">
+    <h2>Assessment Complete!</h2><p>Assessment submitted successfully.</p>
+  </div>
+<script>
+document.querySelectorAll("#opts [role=radio]").forEach(d => {
+  d.addEventListener("click", () => {
+    document.querySelectorAll("#opts [role=radio]").forEach(x => x.setAttribute("aria-checked", x === d ? "true" : "false"));
+  });
+});
+document.getElementById("doneBtn").addEventListener("click", () => {
+  document.getElementById("modal").style.display = "";
+});
+document.getElementById("backBtn").addEventListener("click", () => {
+  document.getElementById("modal").style.display = "none";
+});
+document.getElementById("confirmBtn").addEventListener("click", () => {
+  const sel = [...document.querySelectorAll("#opts [role=radio]")].findIndex(d => d.getAttribute("aria-checked") === "true");
+  if (sel === 1) {
+    document.getElementById("qwrap").style.display = "none";
+    document.getElementById("done").style.display = "";
+  } else {
+    document.getElementById("modal").style.display = "none";
+  }
+});
+</script>
+</main>
+</body>
+</html>

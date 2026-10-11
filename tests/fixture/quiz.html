@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Local Quiz Fixture</title>
+<style>
+  body { font-family: sans-serif; max-width: 640px; margin: 2rem auto; }
+  button { margin: 0.25rem; padding: 0.5rem 1rem; }
+  #feedback { min-height: 1.5em; font-weight: bold; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Quiz Fixture</h1>
+  <div id="question" data-question-id="" style="display:none">
+    <h2 data-question-text></h2>
+    <div id="options"></div>
+    <div id="text-entry" style="display:none">
+      <label>Your answer: <input type="text" data-answer-input aria-label="Your answer" /></label>
+    </div>
+    <div>
+      <button type="submit" data-submit>Submit</button>
+    </div>
+  </div>
+  <div id="feedback" data-feedback role="status" aria-live="polite"></div>
+  <div id="completion" data-completion style="display:none">
+    <h2>Quiz Complete!</h2>
+    <p>Congratulations, you finished all questions.</p>
+    <p>Final score: 5/5</p>
+  </div>
+</main>
+<script>
+const QUESTIONS = [
+  { id: "q1", text: "Q1: What is 2 + 2?", options: [
+    {id: "a", text: "3"}, {id: "b", text: "4"}, {id: "c", text: "5"} ], answer: "b", delayMs: 100 },
+  { id: "q2", text: "Q2: What is the capital of France?", options: [
+    {id: "paris", text: "Paris"}, {id: "london", text: "London"}, {id: "berlin", text: "Berlin"} ], answer: "paris", delayMs: 100 },
+  { id: "q3", text: "Q3: Type the word python (text entry).", type: "text", answer: "python", delayMs: 100 },
+  { id: "q4-delayed", text: "Q4 (delayed): Which is the largest planet?", options: [
+    {id: "jupiter", text: "Jupiter"}, {id: "mars", text: "Mars"}, {id: "venus", text: "Venus"} ], answer: "jupiter", delayMs: 1500 },
+  { id: "q5", text: "Q5: What is 10 - 3?", options: [
+    {id: "a", text: "6"}, {id: "b", text: "7"}, {id: "c", text: "8"} ], answer: "b", delayMs: 100 },
+];
+const EMPTY_QUESTION = { id: "q-empty", text: "Q-empty: This question has no valid options.", options: [], delayMs: 100 };
+
+const params = new URLSearchParams(location.search);
+const only = params.get("only"); // "empty" -> render broken question only
+let idx = 0;
+
+const qDiv = document.getElementById("question");
+const qText = qDiv.querySelector("[data-question-text]");
+const optsDiv = document.getElementById("options");
+const textEntry = document.getElementById("text-entry");
+const answerInput = textEntry.querySelector("[data-answer-input]");
+const feedback = document.getElementById("feedback");
+const completion = document.getElementById("completion");
+const submitBtn = qDiv.querySelector("[data-submit]");
+let selected = null;
+
+function render(q) {
+  qDiv.style.display = "";
+  qDiv.setAttribute("data-question-id", q.id);
+  qText.textContent = q.text;
+  optsDiv.innerHTML = "";
+  selected = null;
+  feedback.textContent = "";
+  if (q.type === "text") {
+    textEntry.style.display = "";
+    answerInput.value = "";
+  } else {
+    textEntry.style.display = "none";
+    (q.options || []).forEach(o => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.setAttribute("data-option-id", o.id);
+      btn.textContent = o.text;
+      btn.setAttribute("aria-label", o.text);
+      btn.addEventListener("click", () => {
+        selected = o.id;
+        [...optsDiv.children].forEach(c => c.setAttribute("aria-pressed", c === btn ? "true" : "false"));
+      });
+      // also a hidden radio for semantic-locator coverage
+      const radio = document.createElement("input");
+      radio.type = "radio"; radio.name = "choice"; radio.value = o.id;
+      radio.id = "radio-" + o.id; radio.style.display = "none";
+      radio.addEventListener("change", () => { selected = o.id; });
+      const lab = document.createElement("label");
+      lab.setAttribute("for", radio.id); lab.style.display = "none"; lab.textContent = o.text;
+      optsDiv.appendChild(radio); optsDiv.appendChild(lab); optsDiv.appendChild(btn);
+    });
+  }
+}
+
+function currentQuestions() {
+  if (only === "empty") return [EMPTY_QUESTION];
+  return QUESTIONS;
+}
+
+function submit() {
+  const list = currentQuestions();
+  const q = list[idx];
+  let ok = false;
+  if (q.type === "text") {
+    ok = answerInput.value.trim().toLowerCase() === q.answer.toLowerCase();
+  } else if (!q.options || q.options.length === 0) {
+    feedback.textContent = "No valid options for this question.";
+    return;
+  } else {
+    ok = selected === q.answer;
+  }
+  if (!ok && q.type !== "text") {
+    // Still advance on wrong answer in fixture? No — show feedback, stay.
+    // For deterministic tests the mock solver always answers correctly.
+    feedback.textContent = "Incorrect, try again.";
+    return;
+  }
+  if (!ok) { feedback.textContent = "Incorrect, try again."; return; }
+  feedback.textContent = "Correct! Accepted.";
+  const delay = q.delayMs || 100;
+  submitBtn.disabled = true;
+  setTimeout(() => {
+    submitBtn.disabled = false;
+    idx++;
+    if (idx >= list.length) {
+      qDiv.style.display = "none";
+      completion.style.display = "";
+    } else {
+      render(list[idx]);
+    }
+  }, delay);
+}
+submitBtn.addEventListener("click", submit);
+render(currentQuestions()[0]);
+</script>
+</body>
+</html>

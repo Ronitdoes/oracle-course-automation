@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8" /><title>Take the Assessment</title></head>
+<body>
+<main>
+  <h1>Take the Assessment</h1>
+  <div id="qwrap">
+    <h2 id="qhead">Question 2 of 50</h2>
+    <div id="qbody">
+      <p>The PRODUCT table contains this column: PRICE NUMBER(7,2)</p>
+      <p>Evaluate this statement:</p>
+      <pre>SELECT NVL(10 / price, '0') FROM PRODUCT;</pre>
+      <p>What would happen if the PRICE column contains null values?</p>
+    </div>
+    <!-- Persistent instructional banner (must NOT count as submission feedback) -->
+    <div id="hint" role="status">Choices - Just one correct!</div>
+    <div id="opts">
+      <input type="radio" name="choice" id="r0" />
+      <label for="r0">A value of 10 would be displayed.</label>
+      <input type="radio" name="choice" id="r1" />
+      <label for="r1">A value of 0 would be displayed.</label>
+      <!-- entity-encoded aria-label, as served by APEX -->
+      <input type="radio" name="choice" id="r2" aria-label="A&#x20;value&#x20;of&#x20;10&#x20;would&#x20;fail." />
+      <input type="radio" name="choice" id="r3" />
+      <label for="r3">The statement would fail entirely.</label>
+    </div>
+    <button type="button" id="submitBtn">Submit Answer</button>
+    <div id="result" role="alert" style="display:none"></div>
+  </div>
+  <div id="done" data-completion style="display:none">
+    <h2>Assessment Complete!</h2><p>You finished all questions.</p>
+  </div>
+<script>
+let idx = 0;
+const ANSWERS = ["opt-1", "opt-0", "opt-2"]; // correct option ids per question
+const HEADS = ["Question 2 of 50", "Question 3 of 50", "Question 4 of 50"];
+const OPTS_HTML = [
+  null, // Q2 keeps the static input-based markup above
+  null, // Q3 reuses the same markup
+  // Q4: ARIA-only radios (Oracle APEX style, no native inputs at all)
+  `<div role="radiogroup" aria-label="Choices">
+    <div role="radio" tabindex="0" aria-checked="false">A value of 10 would be displayed.</div>
+    <div role="radio" tabindex="0" aria-checked="false">A value of 0 would be displayed.</div>
+    <div role="radio" tabindex="0" aria-checked="false">The statement would fail because values cannot be divided by null.</div>
+    <div role="radio" tabindex="0" aria-checked="false">The statement would fail entirely.</div>
+  </div>`,
+];
+document.querySelectorAll("#opts [role=radio]").forEach(d => {
+  d.addEventListener("click", () => {
+    document.querySelectorAll("#opts [role=radio]").forEach(x => x.setAttribute("aria-checked", x === d ? "true" : "false"));
+  });
+});
+function renderQuestion() {
+  document.getElementById("qhead").textContent = HEADS[idx];
+  if (OPTS_HTML[idx]) {
+    document.getElementById("opts").innerHTML = OPTS_HTML[idx];
+    bindDivRadios();
+  }
+}
+const submitBtn = document.getElementById("submitBtn");
+const result = document.getElementById("result");
+function selectedIndex() {
+  const inputs = document.querySelectorAll("#opts input[type=radio]");
+  for (let i = 0; i < inputs.length; i++) if (inputs[i].checked) return i;
+  const divs = document.querySelectorAll("#opts [role=radio]");
+  for (let i = 0; i < divs.length; i++) if (divs[i].getAttribute("aria-checked") === "true") return i;
+  return -1;
+}
+function bindDivRadios() {
+  document.querySelectorAll("#opts [role=radio]").forEach(d => {
+    d.addEventListener("click", () => {
+      document.querySelectorAll("#opts [role=radio]").forEach(x => x.setAttribute("aria-checked", x === d ? "true" : "false"));
+    });
+  });
+}
+submitBtn.addEventListener("click", () => {
+  const sel = selectedIndex();
+  if (sel >= 0 && ("opt-" + sel) === ANSWERS[idx]) {
+    result.style.display = "";
+    result.textContent = "Correct!";
+    submitBtn.disabled = true;
+    setTimeout(() => {
+      submitBtn.disabled = false;
+      result.style.display = "none";
+      idx++;
+      if (idx >= ANSWERS.length) {
+        document.getElementById("qwrap").style.display = "none";
+        document.getElementById("done").style.display = "";
+      } else {
+        renderQuestion();
+      }
+    }, 300);
+  } else {
+    result.style.display = "";
+    result.textContent = "Incorrect, try again.";
+  }
+});
+</script>
+</main>
+</body>
+</html>

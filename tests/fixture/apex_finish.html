@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8" /><title>Take the Assessment</title></head>
+<body>
+<main>
+  <h1>Take the Assessment</h1>
+  <div id="qwrap">
+    <h2>Question 50 of 50</h2>
+    <p>Which statement about group functions is true?</p>
+    <div role="status">Choices - Just one correct!</div>
+    <div id="opts">
+      <div role="radio" tabindex="0" aria-checked="false">A query that includes a group function must include GROUP BY.</div>
+      <div role="radio" tabindex="0" aria-checked="false">Group functions ignore null values.</div>
+    </div>
+    <!-- No 'Submit' button: final question uses a differently-labeled control -->
+    <button type="button" id="prevBtn">Previous Question</button>
+    <button type="button" id="doneBtn">Complete Assessment</button>
+    <div id="result" role="alert" style="display:none"></div>
+  </div>
+  <div id="done" data-completion style="display:none">
+    <h2>Assessment Complete!</h2><p>Assessment submitted successfully. Final score: 2/2</p>
+  </div>
+<script>
+document.querySelectorAll("#opts [role=radio]").forEach(d => {
+  d.addEventListener("click", () => {
+    document.querySelectorAll("#opts [role=radio]").forEach(x => x.setAttribute("aria-checked", x === d ? "true" : "false"));
+  });
+});
+document.getElementById("doneBtn").addEventListener("click", () => {
+  const sel = [...document.querySelectorAll("#opts [role=radio]")].findIndex(d => d.getAttribute("aria-checked") === "true");
+  const result = document.getElementById("result");
+  if (sel === 1) {
+    // Like Oracle APEX "Complete Assessment": native confirm first.
+    if (!confirm("Submit the assessment now?")) {
+      result.style.display = "";
+      result.textContent = "Submission cancelled.";
+      return;
+    }
+    document.getElementById("qwrap").style.display = "none";
+    document.getElementById("done").style.display = "";
+  } else {
+    result.style.display = "";
+    result.textContent = "Incorrect, try again.";
+  }
+});
+</script>
+</main>
+</body>
+</html>
