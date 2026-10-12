@@ -39,7 +39,6 @@ FIELD_SPECS: list[tuple] = [
     ("LOG_LEVEL", "Log level", "combo", ["DEBUG", "INFO", "WARNING", "ERROR"]),
     ("DRY_RUN", "Dry run (never submit)", "bool", None),
     ("REQUIRE_APPROVAL", "Require approval", "bool", None),
-    ("AUTO_ADVANCE_LESSONS", "Auto-advance lessons + courses", "bool", None),
     ("REDO_FINISHED_SECTIONS", "Redo finished sections/courses", "bool", None),
     ("REDACT_QUESTION_TEXT_IN_LOGS", "Redact questions in logs", "bool", None),
     ("PERSIST_QUESTION_TEXT", "Persist question text", "bool", None),
@@ -52,7 +51,7 @@ GROUPS: list[tuple[str, list[str]]] = [
                  "NAVIGATION_TIMEOUT_MS", "ACTION_TIMEOUT_MS"]),
     ("Limits", ["MAX_QUESTIONS", "MAX_RETRIES", "MAX_ACTIONS", "RUN_MAX_DURATION_SEC"]),
     ("Storage", ["SCREENSHOT_DIR", "DATABASE_PATH", "LOG_LEVEL"]),
-    ("Safety & privacy", ["DRY_RUN", "REQUIRE_APPROVAL", "AUTO_ADVANCE_LESSONS", "REDO_FINISHED_SECTIONS",
+    ("Safety & privacy", ["DRY_RUN", "REQUIRE_APPROVAL", "REDO_FINISHED_SECTIONS",
                           "REDACT_QUESTION_TEXT_IN_LOGS", "PERSIST_QUESTION_TEXT"]),
 ]
 

@@ -297,12 +297,11 @@ class MainWindow(QMainWindow):
         self._ck_dry = QCheckBox("Dry run")
         self._ck_headed = QCheckBox("Show browser")
         self._ck_approval = QCheckBox("Require approval")
-        self._ck_lessons = QCheckBox("Auto-advance lessons/courses")
         self._spin_max = QSpinBox()
         self._spin_max.setRange(1, 5000)
         self._spin_max.setValue(500)
         self._spin_max.setPrefix("Max ")
-        for c in (self._ck_dry, self._ck_headed, self._ck_approval, self._ck_lessons):
+        for c in (self._ck_dry, self._ck_headed, self._ck_approval):
             opts.addWidget(c)
         opts.addWidget(self._spin_max)
         opts.addStretch(1)
@@ -352,7 +351,6 @@ class MainWindow(QMainWindow):
         self._ck_dry.setChecked(str_to_bool(vals.get("DRY_RUN", "false")))
         self._ck_headed.setChecked(not str_to_bool(vals.get("HEADLESS", "true")))
         self._ck_approval.setChecked(str_to_bool(vals.get("REQUIRE_APPROVAL", "false")))
-        self._ck_lessons.setChecked(str_to_bool(vals.get("AUTO_ADVANCE_LESSONS", "false")))
         try:
             self._spin_max.setValue(int(vals.get("MAX_QUESTIONS", "500")))
         except ValueError:
@@ -445,7 +443,9 @@ class MainWindow(QMainWindow):
         os.environ["DRY_RUN"] = bool_to_str(self._ck_dry.isChecked())
         os.environ["HEADLESS"] = bool_to_str(not self._ck_headed.isChecked())
         os.environ["REQUIRE_APPROVAL"] = bool_to_str(self._ck_approval.isChecked())
-        os.environ["AUTO_ADVANCE_LESSONS"] = bool_to_str(self._ck_lessons.isChecked())
+        # Auto-advance is always on in the app: it walks Take Class →
+        # sections/exams → Finish Assessment across courses by itself.
+        os.environ["AUTO_ADVANCE_LESSONS"] = "true"
         os.environ["MAX_QUESTIONS"] = str(self._max_q)
 
         self._steps.setRowCount(0)

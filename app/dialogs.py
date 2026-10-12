@@ -199,8 +199,6 @@ class SetupWizard(QDialog):
         lay.addWidget(QLabel("Max questions"))
         lay.addWidget(self._max_q)
 
-        self._lessons = QCheckBox("Auto-advance lessons/courses (walk My Classes by itself)")
-        lay.addWidget(self._lessons)
         self._approval = QCheckBox("Require approval before each submit")
         lay.addWidget(self._approval)
 
@@ -219,7 +217,6 @@ class SetupWizard(QDialog):
             self._max_q.setValue(int(str(initial.get("MAX_QUESTIONS") or "500").strip() or "500"))
         except ValueError:
             self._max_q.setValue(500)
-        self._lessons.setChecked(_str_to_bool(initial.get("AUTO_ADVANCE_LESSONS", "true")))
         self._approval.setChecked(_str_to_bool(initial.get("REQUIRE_APPROVAL", "false")))
         self._refresh_provider_hint()
         self._provider.currentTextChanged.connect(self._on_provider_changed)
@@ -253,7 +250,8 @@ class SetupWizard(QDialog):
             "LLM_API_KEYS": self._keys_extra.text().strip(),
             "LLM_BASE_URL": self._base_url(),
             "MAX_QUESTIONS": str(self._max_q.value()),
-            "AUTO_ADVANCE_LESSONS": "true" if self._lessons.isChecked() else "false",
+            # Auto-advance is always on: the app walks courses by itself.
+            "AUTO_ADVANCE_LESSONS": "true",
             "REQUIRE_APPROVAL": "true" if self._approval.isChecked() else "false",
         }
 
