@@ -59,7 +59,8 @@ class Settings:
     max_questions: int = field(default_factory=lambda: _get_int("MAX_QUESTIONS", 500))
     max_retries: int = field(default_factory=lambda: _get_int("MAX_RETRIES", 2))
     max_actions: int = field(default_factory=lambda: _get_int("MAX_ACTIONS", 500))
-    run_max_duration_sec: int = field(default_factory=lambda: _get_int("RUN_MAX_DURATION_SEC", 300))
+    # No time cap: 0 (or negative) means unlimited. Questions/actions caps still bound the run.
+    run_max_duration_sec: int = field(default_factory=lambda: _get_int("RUN_MAX_DURATION_SEC", 0))
 
     screenshot_dir: str = field(default_factory=lambda: _get_str("SCREENSHOT_DIR", "./artifacts/screenshots"))
     database_path: str = field(default_factory=lambda: _get_str("DATABASE_PATH", "./artifacts/runs.sqlite"))

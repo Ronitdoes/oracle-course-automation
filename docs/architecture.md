@@ -70,10 +70,10 @@ diagnose what went wrong.
    finished screen appeared — based on the question ID changing, the wording
    changing, or the finished marker appearing) count as progress.
 2. No endless loops: `max_retries` (cap on re-tries per problem),
-   `max_questions` (cap on questions per run), `max_actions` (cap on
-   clicks/typings per run), and `run_max_duration_sec` (cap on total seconds)
-   are all enforced; when the retry allowance runs out, the loop moves from
-   RECOVER to STOPPED (stops and asks for a human).
+   `max_questions` (cap on questions per run), and `max_actions` (cap on
+   clicks/typings per run) are all enforced (the old total-seconds cap is off:
+   `run_max_duration_sec` of 0 means unlimited); when the retry allowance runs
+   out, the loop moves from RECOVER to STOPPED (stops and asks for a human).
 3. No double submit (no sending the same answer twice): a `submitted_ids`
    memory (the list of already-submitted question IDs) plus a fresh check of
    the page just before submitting.

@@ -65,7 +65,8 @@ class Controller:
             return f"question limit ({self.settings.max_questions}) reached, stopping as planned"
         if self.actions_taken >= self.settings.max_actions:
             return f"click limit ({self.settings.max_actions}) reached, stopping as planned"
-        if time.monotonic() - self._t0 > self.settings.run_max_duration_sec:
+        if self.settings.run_max_duration_sec > 0 and \
+                time.monotonic() - self._t0 > self.settings.run_max_duration_sec:
             return f"time limit ({self.settings.run_max_duration_sec}s) reached, stopping as planned"
         return ""
 
