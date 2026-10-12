@@ -205,3 +205,49 @@ def test_main_window_has_setup_button():
         assert w._btn_setup.text() == "Setup"
     finally:
         w.close()
+
+
+def test_setup_popup_opens_and_saves_without_crash(tmp_path, monkeypatch):
+    """Regression: the setup popup crashed on open (dlg.Accepted AttributeError),
+    so first-run users never saw it. Accepting must save .env cleanly."""
+    _offscreen_app()
+    from PySide6.QtWidgets import QApplication, QDialog
+    from app import dialogs as _dlgmod
+    from app.main_window import MainWindow
+    from app.theme import apply_theme
+
+    apply_theme(QApplication.instance())
+    w = MainWindow()
+    try:
+        monkeypatch.setattr(w, "_env_path", lambda: tmp_path / ".env")
+        monkeypatch.setattr(_dlgmod.SetupWizard, "exec", lambda self: int(QDialog.Accepted))
+        w._open_setup(first_run=True)  # must not raise
+        text = (tmp_path / ".env").read_text(encoding="utf-8")
+        assert "LLM_PROVIDER=" in text
+    finally:
+        w.close()
+
+
+def test_needs_api_key_prompts_only_when_key_missing(monkeypatch):
+    """The setup popup appears when a real provider has no key — never for mock."""
+    _offscreen_app()
+    from PySide6.QtWidgets import QApplication
+    from app import main_window as _mw
+    from app.main_window import MainWindow
+    from app.theme import apply_theme
+
+    apply_theme(QApplication.instance())
+    monkeypatch.setattr(_mw, "load_env", lambda *a, **k: {})
+    w = MainWindow()
+    try:
+        monkeypatch.setenv("LLM_PROVIDER", "groq")
+        monkeypatch.setenv("LLM_API_KEY", "")
+        monkeypatch.setenv("LLM_API_KEYS", "")
+        assert w._needs_api_key() is True
+        monkeypatch.setenv("LLM_API_KEYS", "k1,k2")
+        assert w._needs_api_key() is False
+        monkeypatch.setenv("LLM_PROVIDER", "mock")
+        monkeypatch.setenv("LLM_API_KEYS", "")
+        assert w._needs_api_key() is False
+    finally:
+        w.close()

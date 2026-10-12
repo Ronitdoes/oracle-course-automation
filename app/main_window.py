@@ -15,7 +15,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QTimer, Signal, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFormLayout, QGroupBox, QHBoxLayout,
+    QCheckBox, QComboBox, QDialog, QFormLayout, QGroupBox, QHBoxLayout,
     QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit,
     QProgressBar, QPushButton, QScrollArea, QSpinBox,
     QStackedWidget, QStatusBar, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
@@ -224,9 +224,11 @@ class MainWindow(QMainWindow):
         self._flush.setInterval(200)
         self._flush.timeout.connect(self._flush_pending)
         self._load_env_into_run_bar()
-        if os.environ.pop("BROWSER_AGENT_FIRST_RUN", "") == "1":
-            # Fresh install: ask for the AI key + basic setup once the
-            # window is up instead of failing later with a missing key.
+        first_run = os.environ.pop("BROWSER_AGENT_FIRST_RUN", "") == "1"
+        if first_run or self._needs_api_key():
+            # Fresh install (or a real provider with no key yet): ask for the
+            # AI key + basic setup once the window is up instead of failing
+            # later with a missing key.
             QTimer.singleShot(400, lambda: self._open_setup(first_run=True))
 
     # ============ navigation ============
@@ -362,6 +364,16 @@ class MainWindow(QMainWindow):
     def _set_pill(self, state: str):
         self._pill.setText(state.upper() or "—")
         self._pill.setStyleSheet(pill_style(state))
+
+    def _needs_api_key(self) -> bool:
+        """True when a real provider is selected but no key is configured."""
+        vals = load_env(self._root / ".env") | load_env(".env")
+        provider = (os.environ.get("LLM_PROVIDER") or vals.get("LLM_PROVIDER", "mock")).strip().lower()
+        if provider not in ("gemini", "groq", "openai"):
+            return False
+        key = (os.environ.get("LLM_API_KEY") or vals.get("LLM_API_KEY", "")).strip()
+        extra = (os.environ.get("LLM_API_KEYS") or vals.get("LLM_API_KEYS", "")).strip()
+        return not (key or extra)
 
     # -- run control --
     def _open_academy(self):
@@ -518,7 +530,7 @@ class MainWindow(QMainWindow):
         if not self._run_active or self._worker is None:
             return
         dlg = ApprovalDialog(payload, self)
-        ok = dlg.exec() == dlg.Accepted
+        ok = dlg.exec() == QDialog.Accepted
         self._append_log(f"approval ({payload.get('kind')}): {'approved' if ok else 'rejected'}")
         self._worker.resolve_approval(ok)
 
@@ -526,9 +538,15 @@ class MainWindow(QMainWindow):
         """First-time (or re-run) setup: AI key + basic settings into .env."""
         dlg = SetupWizard(self._env_path(), load_env(self._env_path()),
                           first_run=first_run, parent=self)
-        if dlg.exec() == dlg.Accepted:
-            for k, v in dlg.values().items():
+        if dlg.exec() == QDialog.Accepted:
+            vals = dlg.values()
+            for k, v in vals.items():
                 os.environ[k] = v
+            try:
+                save_env(self._env_path(), vals)
+            except Exception as e:  # noqa: BLE001
+                QMessageBox.warning(self, "Save failed", str(e))
+                return
             self._load_env_into_run_bar()
             self._append_log("— setup saved to .env")
             self.statusBar().showMessage("Setup saved.")
