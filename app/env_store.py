@@ -1,6 +1,7 @@
 """Read/write the .env settings file, preserving comments and order."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 KNOWN_KEYS: list[str] = [
@@ -113,3 +114,38 @@ def bool_to_str(v: bool) -> str:
 
 def str_to_bool(v: str) -> bool:
     return (v or "").strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def default_browsers_path() -> Path:
+    """Per-user dir for Playwright browser downloads (no admin needed).
+
+    The installed app keeps its Chromium here so it survives reinstalls
+    and never needs elevated rights. Normal desktop use (attaching to the
+    user's own Chrome) never touches this folder.
+    """
+    local = (os.environ.get("LOCALAPPDATA") or "").strip()
+    if local:
+        return Path(local) / "BrowserAgent" / "ms-playwright"
+    return Path.home() / ".cache" / "BrowserAgent" / "ms-playwright"
+
+
+def bundled_path(root: Path, name: str) -> Path:
+    """Locate a file shipped with the app.
+
+    Dev runs keep it next to the project (``root / name``). Frozen builds
+    (PyInstaller onedir) place data files under ``sys._MEIPASS`` (the
+    ``_internal`` folder beside the exe), so look there too.
+    """
+    direct = root / name
+    if direct.exists():
+        return direct
+    try:
+        import sys
+        meipass = getattr(sys, "_MEIPASS", "")
+        if meipass:
+            cand = Path(meipass) / name
+            if cand.exists():
+                return cand
+    except Exception:
+        pass
+    return direct

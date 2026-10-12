@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.dialogs import ApprovalDialog
-from app.env_store import FIELD_SPECS, GROUPS, bool_to_str, load_env, save_env, str_to_bool
+from app.env_store import FIELD_SPECS, GROUPS, bool_to_str, bundled_path, load_env, save_env, str_to_bool
 from app.logo import build_icon, logo_pixmap
 from app.theme import pill_style
 from app.worker import RunWorker
@@ -555,14 +555,50 @@ class MainWindow(QMainWindow):
             t.start()
 
     def _install_browser(self):
+        # Runs in a worker thread; reports back via extralog.
+        # Frozen (installed/portable exe) has no Python interpreter, so the
+        # usual `python -m playwright install` cannot work: drive the bundled
+        # Playwright node + CLI directly instead.
+        import sys
         try:
+            from app.env_store import default_browsers_path
+            browsers_dir = str(default_browsers_path())
+        except Exception:
+            browsers_dir = ""
+        try:
+            env = dict(os.environ)
+            if browsers_dir:
+                env.setdefault("PLAYWRIGHT_BROWSERS_PATH", browsers_dir)
+            no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            if getattr(sys, "frozen", False):
+                roots = []
+                try:
+                    roots.append(Path(sys._MEIPASS))  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+                roots.append(Path(sys.executable).resolve().parent)
+                node = cli = None
+                for root in roots:
+                    cand_node = root / "playwright" / "driver" / ("node.exe" if os.name == "nt" else "node")
+                    cand_cli = root / "playwright" / "driver" / "package" / "cli.js"
+                    if cand_node.exists() and cand_cli.exists():
+                        node, cli = cand_node, cand_cli
+                        break
+                if node is None or cli is None:
+                    self.extralog.emit("— browser files missing from this install; reinstall the app, "
+                                        "or keep using your own Chrome (no download needed for that).")
+                    return
+                cmd = [str(node), str(cli), "install", "chromium"]
+            else:
+                cmd = [sys.executable, "-m", "playwright", "install", "chromium"]
             proc = subprocess.run(
-                ["python", "-m", "playwright", "install", "chromium"],
+                cmd,
                 capture_output=True, text=True, timeout=600, cwd=str(self._root),
+                env=env, creationflags=no_window,
             )
             tail = (proc.stdout or "")[-1500:] + (proc.stderr or "")[-1500:]
             self.extralog.emit("— install output:\n" + tail if tail else "— install finished.")
-            self.extralog.emit("— Chromium install done. Press Start." if proc.returncode == 0 else "— install failed; run 'playwright install chromium' by hand.")
+            self.extralog.emit("— Chromium install done. Press Start." if proc.returncode == 0 else "— install failed; check your connection and try Install now again.")
         except Exception as e:  # noqa: BLE001
             self.extralog.emit(f"— install failed: {e}")
 
@@ -757,7 +793,7 @@ class MainWindow(QMainWindow):
         path = self._env_path()
         self._env_path_label.setText(f"Editing {path}  —  API keys stay local, never logged.")
         example = {}
-        ex = self._root / ".env.example"
+        ex = bundled_path(self._root, ".env.example")
         if ex.exists():
             example = dotenv_values(str(ex))
         vals = load_env(path)

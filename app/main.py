@@ -20,6 +20,16 @@ def main() -> int:
         sys.path.insert(0, str(base))
     os.chdir(str(base))
 
+    if getattr(sys, "frozen", False):
+        # Installed/portable exe: keep Playwright browser downloads in a
+        # per-user dir (no admin rights, survives reinstalls). Dev runs keep
+        # Playwright's own default location.
+        try:
+            from app.env_store import default_browsers_path
+            os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(default_browsers_path()))
+        except Exception:
+            pass
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -36,7 +46,8 @@ def main() -> int:
     # Ensure a .env exists (copy example for first-run portability).
     try:
         env = base / ".env"
-        example = base / ".env.example"
+        from app.env_store import bundled_path
+        example = bundled_path(base, ".env.example")
         if not env.exists() and example.exists():
             env.write_text(example.read_text(encoding="utf-8"), encoding="utf-8")
     except Exception:

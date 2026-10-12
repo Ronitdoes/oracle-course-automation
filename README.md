@@ -108,8 +108,22 @@ python -m app.main
 
 Run / History / Settings pages. Approvals appear as dialogs instead of
 terminal prompts. Settings edits `.env` locally; keys are never logged.
-Portable exe: `build_exe.bat` (runs `pyinstaller BrowserAgent.spec`).
-Chromium downloads on first run via `playwright install chromium` if missing.
+
+Installable app (no Python needed on the target machine):
+
+```bat
+build_installer.bat
+```
+
+This builds the portable exe (`dist\BrowserAgent\BrowserAgent.exe`, also
+buildable alone via `build_exe.bat`) and then the real installer
+(`dist-installer\BrowserAgent-Setup-*.exe`, needs the free Inno Setup once).
+The installer is per-user (no admin rights), adds a Start Menu entry with an
+optional desktop icon, and registers an uninstaller. First run copies
+`.env.example` to `.env` by itself; your settings are never overwritten by
+reinstalls. Normal use drives your own Chrome (no browser download needed);
+if launch-mode ever needs Chromium, the app's Install button fetches it into
+your own profile folder.
 
 ## Testing
 
