@@ -141,15 +141,20 @@ def test_unresolved_blocked():
 def test_controller_over_limits_infinite():
     from agent.controller import Controller
 
-    # 0 max_actions and 0 duration mean unlimited / infinite
+    # 0 max_actions and 0 questions mean unlimited / infinite
     s = _settings(max_actions=0, run_max_duration_sec=0, max_questions=0)
     c = Controller(s)
     c.actions_taken = 999999
     c.questions_done = 999999
     assert c._over_limits() == ""
 
-    # Positive limits still enforced if explicitly configured
-    s_capped = _settings(max_actions=10, run_max_duration_sec=0)
+    # Even if run_max_duration_sec were present, no time limit is enforced
+    s.run_max_duration_sec = 1
+    c._t0 = 0.0
+    assert c._over_limits() == ""
+
+    # Positive action limits still enforced if explicitly configured
+    s_capped = _settings(max_actions=10)
     c_capped = Controller(s_capped)
     c_capped.actions_taken = 10
     assert "click limit (10)" in c_capped._over_limits()

@@ -46,12 +46,21 @@ def main() -> int:
     # Ensure a .env exists (copy example for first-run portability).
     try:
         env = base / ".env"
-        from app.env_store import bundled_path
+        from app.env_store import bundled_path, load_env, save_env
         example = bundled_path(base, ".env.example")
         if not env.exists() and example.exists():
             env.write_text(example.read_text(encoding="utf-8"), encoding="utf-8")
             # The window turns this into the first-time setup wizard.
             os.environ["BROWSER_AGENT_FIRST_RUN"] = "1"
+        elif env.exists():
+            vals = load_env(env)
+            updates: dict[str, str] = {}
+            if vals.get("RUN_MAX_DURATION_SEC") not in ("0", ""):
+                updates["RUN_MAX_DURATION_SEC"] = "0"
+            if vals.get("MAX_ACTIONS") == "500":
+                updates["MAX_ACTIONS"] = "0"
+            if updates:
+                save_env(env, updates)
     except Exception:
         pass
 
