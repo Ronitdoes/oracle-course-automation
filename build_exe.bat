@@ -8,7 +8,7 @@ if errorlevel 1 (
   echo PyInstaller is missing. Run:  pip install -r requirements.txt
   exit /b 1
 )
-python -m PyInstaller BrowserAgent.spec
+python -m PyInstaller -y BrowserAgent.spec
 if errorlevel 1 exit /b 1
 echo.
 echo Done. Portable app: dist\BrowserAgent\BrowserAgent.exe

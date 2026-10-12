@@ -115,11 +115,16 @@ def test_steps_and_logs_render_batched():
     assert "page did not change" in w._sub.text()
     w.close()
 
+_APP = None
+
 def _offscreen_app():
+    global _APP
     import os
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
-    return QApplication.instance() or QApplication([])
+    if _APP is None:
+        _APP = QApplication.instance() or QApplication([])
+    return _APP
 
 
 def test_setup_wizard_steers_fresh_install_to_real_key(tmp_path):
@@ -198,7 +203,7 @@ def test_setup_wizard_provider_switch_auto_selects_model():
     from app.dialogs import SetupWizard
     from pathlib import Path as _P
 
-    dlg = SetupWizard(_P("dummy.env"), {"LLM_PROVIDER": "mock", "MODEL_ID": "x"})
+    dlg = SetupWizard(_P("dummy.env"), {"LLM_PROVIDER": "mock", "MODEL_ID": "mock-model"})
     try:
         dlg._provider.setCurrentText("groq")
         assert dlg.values()["MODEL_ID"] == "openai/gpt-oss-120b"
@@ -206,6 +211,21 @@ def test_setup_wizard_provider_switch_auto_selects_model():
         assert dlg.values()["MODEL_ID"] == "gemini-3.5-flash-lite"
         dlg._provider.setCurrentText("openai")
         assert dlg.values()["MODEL_ID"] == "gpt-4o-mini"
+    finally:
+        dlg.close()
+
+
+def test_setup_wizard_keeps_custom_model():
+    """A model the user typed themselves survives provider switches."""
+    _offscreen_app()
+    from app.dialogs import SetupWizard
+    from pathlib import Path as _P
+
+    dlg = SetupWizard(_P("dummy.env"), {"LLM_PROVIDER": "mock", "MODEL_ID": "x"})
+    try:
+        dlg._model.setText("llama-3.3-70b-versatile")
+        dlg._provider.setCurrentText("groq")
+        assert dlg.values()["MODEL_ID"] == "llama-3.3-70b-versatile"
     finally:
         dlg.close()
 

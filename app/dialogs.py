@@ -270,11 +270,16 @@ class SetupWizard(QDialog):
 
     # -- UI wiring --
     def _on_provider_changed(self, name: str) -> None:
-        # Auto-select the default model for the chosen provider, so the user
-        # only has to paste the API key. Always refresh (not just when empty).
+        # Auto-select the default model for the chosen provider (so a fresh
+        # user only pastes the API key), but never clobber a custom model the
+        # user typed themselves — only empty or known-default values refresh.
         name = (name or "").strip().lower()
         if name in PROVIDER_DEFAULTS:
-            self._model.setText(PROVIDER_DEFAULTS[name]["model"])
+            current = self._model.text().strip()
+            known = {d["model"] for d in PROVIDER_DEFAULTS.values()} | {
+                "mock-model", "gemini-2.0-flash"}
+            if not current or current in known:
+                self._model.setText(PROVIDER_DEFAULTS[name]["model"])
         self._refresh_provider_hint()
 
     def _refresh_provider_hint(self) -> None:

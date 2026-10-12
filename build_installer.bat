@@ -9,8 +9,10 @@ if errorlevel 1 (
   echo PyInstaller is missing. Run:  pip install -r requirements.txt
   exit /b 1
 )
-python -m PyInstaller BrowserAgent.spec
+python -m PyInstaller -y BrowserAgent.spec
 if errorlevel 1 exit /b 1
+if exist "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" set "PATH=%PATH%;C:\Program Files (x86)\Inno Setup 6"
+if exist "C:\Program Files\Inno Setup 6\ISCC.exe" set "PATH=%PATH%;C:\Program Files\Inno Setup 6"
 where ISCC >NUL 2>&1
 if errorlevel 1 (
   echo.
