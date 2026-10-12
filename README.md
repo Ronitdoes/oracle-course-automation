@@ -4,7 +4,7 @@ Browser Agent is a Windows app that works through your Oracle Academy courses fo
 
 ## Install
 
-1. Download `BrowserAgent-Setup-1.0.0.exe` from **[Releases](https://github.com/Ronitdoes/oracle-course-automation/releases/latest)**.
+1. Download `BrowserAgent-Setup-1.1.exe` from **[Releases](https://github.com/Ronitdoes/oracle-course-automation/releases/latest)**.
 2. Run it. It installs for your user only (no admin rights needed).
 3. Open **Browser Agent** from the Start Menu.
 
@@ -17,7 +17,7 @@ To install anyway:
 1. Click **More info**.
 2. Click **Run anyway**.
 
-The file properties now show the real publisher name (Browser Agent, v1.0.0). A paid code-signing certificate is the only thing that removes this warning completely — planned for a later release.
+The file properties now show the real publisher name (Browser Agent, v1.1). A paid code-signing certificate is the only thing that removes this warning completely — planned for a later release.
 
 ## First-time setup
 

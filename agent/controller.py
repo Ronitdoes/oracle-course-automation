@@ -61,11 +61,11 @@ class Controller:
     def _over_limits(self) -> str:
         if self._stop_requested:
             return "you asked to stop, so stopping now"
-        if self.questions_done >= self.settings.max_questions:
+        if self.settings.max_questions > 0 and self.questions_done >= self.settings.max_questions:
             return f"question limit ({self.settings.max_questions}) reached, stopping as planned"
-        if self.actions_taken >= self.settings.max_actions:
+        if self.settings.max_actions > 0 and self.actions_taken >= self.settings.max_actions:
             return f"click limit ({self.settings.max_actions}) reached, stopping as planned"
-        if self.settings.run_max_duration_sec > 0 and \
+        if getattr(self.settings, "run_max_duration_sec", 0) > 0 and \
                 time.monotonic() - self._t0 > self.settings.run_max_duration_sec:
             return f"time limit ({self.settings.run_max_duration_sec}s) reached, stopping as planned"
         return ""

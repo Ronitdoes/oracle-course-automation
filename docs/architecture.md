@@ -71,7 +71,7 @@ diagnose what went wrong.
    changing, or the finished marker appearing) count as progress.
 2. No endless loops: `max_retries` (cap on re-tries per problem),
    `max_questions` (cap on questions per run), and `max_actions` (cap on
-   clicks/typings per run) are all enforced (the old total-seconds cap is off:
+   clicks/typings per run, 0 = unlimited / infinite; total-seconds cap
    `run_max_duration_sec` of 0 means unlimited); when the retry allowance runs
    out, the loop moves from RECOVER to STOPPED (stops and asks for a human).
 3. No double submit (no sending the same answer twice): a `submitted_ids`

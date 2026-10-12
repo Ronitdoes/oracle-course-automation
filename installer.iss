@@ -11,7 +11,7 @@
 ; and are created on first run — they are never overwritten by reinstalls.
 
 #define MyAppName "Browser Agent"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1"
 #define MyAppPublisher "BrowserAgent"
 #define MyAppExeName "BrowserAgent.exe"
 

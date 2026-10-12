@@ -6,8 +6,8 @@
 # build_installer.bat CERT_THUMBPRINT support).
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
+    filevers=(1, 1, 0, 0),
+    prodvers=(1, 1, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -23,12 +23,12 @@ VSVersionInfo(
           [
             StringStruct('CompanyName', 'BrowserAgent'),
             StringStruct('FileDescription', 'Browser Agent - Oracle Academy course helper'),
-            StringStruct('FileVersion', '1.0.0'),
+            StringStruct('FileVersion', '1.1.0'),
             StringStruct('InternalName', 'BrowserAgent'),
             StringStruct('LegalCopyright', 'BrowserAgent'),
             StringStruct('OriginalFilename', 'BrowserAgent.exe'),
             StringStruct('ProductName', 'Browser Agent'),
-            StringStruct('ProductVersion', '1.0.0'),
+            StringStruct('ProductVersion', '1.1.0'),
           ],
         ),
       ]

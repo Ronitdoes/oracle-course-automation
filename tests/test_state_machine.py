@@ -136,3 +136,21 @@ def test_unresolved_blocked():
     s = _settings()
     res = plan(_q(), AnswerCandidate(status=AnswerStatus.UNRESOLVED), s)
     assert res.blocked
+
+
+def test_controller_over_limits_infinite():
+    from agent.controller import Controller
+
+    # 0 max_actions and 0 duration mean unlimited / infinite
+    s = _settings(max_actions=0, run_max_duration_sec=0, max_questions=0)
+    c = Controller(s)
+    c.actions_taken = 999999
+    c.questions_done = 999999
+    assert c._over_limits() == ""
+
+    # Positive limits still enforced if explicitly configured
+    s_capped = _settings(max_actions=10, run_max_duration_sec=0)
+    c_capped = Controller(s_capped)
+    c_capped.actions_taken = 10
+    assert "click limit (10)" in c_capped._over_limits()
+

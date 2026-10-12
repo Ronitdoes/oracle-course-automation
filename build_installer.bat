@@ -37,5 +37,5 @@ if defined CERT_THUMBPRINT (
   if errorlevel 1 exit /b 1
   echo Signed.
 ) else (
-  echo Unsigned build (no CERT_THUMBPRINT set) - Windows SmartScreen will warn on first run; see README.
+  echo Unsigned build: Windows SmartScreen will warn on first run; see README.
 )
