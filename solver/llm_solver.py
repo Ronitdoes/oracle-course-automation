@@ -110,6 +110,53 @@ def _pick(question: Question, needle: str) -> str | None:
     return question.options[0].option_id if question.options else None
 
 
+def _provider_keys(settings: Settings) -> list[str]:
+    """Ordered API keys to try: settings.api_key first, then the pool.
+
+    Reading api_key first (rather than trusting api_keys order) keeps
+    post-construction overrides working (tests set s.api_key directly).
+    """
+    ordered: list[str] = []
+    first = (settings.api_key or "").strip()
+    if first:
+        ordered.append(first)
+    for k in getattr(settings, "api_keys", None) or []:
+        k = (k or "").strip()
+        if k and k not in ordered:
+            ordered.append(k)
+    return ordered
+
+
+def _is_key_error(exc: Exception) -> bool:
+    """True when the failure looks key-related (worth trying the next key).
+
+    401/402/403 = bad key, 429 = this key's quota spent, 400 mentioning a key,
+    5xx = provider hiccup (next key attempt is harmless; single-key runs raise).
+    Anything else (bad model name, bad request shape, network errors) raises
+    at once instead of burning through the pool.
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code if exc.response is not None else 0
+        if code in (401, 402, 403, 429):
+            return True
+        if code == 400:
+            try:
+                body = (exc.response.text or "").lower()
+            except Exception:
+                body = ""
+            if "api key" in body or "apikey" in body or "invalid" in body or "unauthorized" in body:
+                return True
+        if code in (500, 502, 503, 529):
+            return True
+    return False
+
+
+def _key_err_summary(exc: Exception) -> str:
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+        return f"HTTP {exc.response.status_code}"
+    return type(exc).__name__
+
+
 class OpenAICompatibleSolver(BaseSolver):
     """Web client for OpenAI-style answer services (also works with Azure, Ollama, vLLM and similar)."""
 
@@ -118,6 +165,8 @@ class OpenAICompatibleSolver(BaseSolver):
         self.timeout_sec = timeout_sec
         self._calls = 0
         self._latency_total = 0.0
+        self._key_index = 0  # sticky position in the failover pool
+        self._active_key: str | None = None
 
     @property
     def calls(self) -> int:
@@ -131,16 +180,30 @@ class OpenAICompatibleSolver(BaseSolver):
         return httpx.AsyncClient(timeout=self.timeout_sec)
 
     async def solve(self, question: Question) -> AnswerCandidate:
-        if not self.settings.api_key:
-            raise RuntimeError("The secret key (LLM_API_KEY) is missing for '{}'. Copy .env.example to .env and add your key.".format(self.settings.llm_provider))
-        cand = await self._attempt(question, temperature=0.0)
-        if cand.status == AnswerStatus.UNRESOLVED:
-            # One second try: the first strict try sometimes gives no answer
-            # where a freer second try gives a usable one.
-            # Still checked against the page; a second 'no answer' stands.
-            log.info("The AI gave no answer the first time; trying once more with a freer guess")
-            cand = await self._attempt(question, temperature=0.7)
-        return cand
+        keys = _provider_keys(self.settings)
+        if not keys:
+            raise RuntimeError("The secret key (LLM_API_KEY) is missing for '{}'. Copy .env.example to .env and add your key (LLM_API_KEY, or several in LLM_API_KEYS for failover).".format(self.settings.llm_provider))
+        start = self._key_index % len(keys)
+        for n in range(len(keys)):
+            idx = (start + n) % len(keys)
+            self._active_key = keys[idx]
+            try:
+                cand = await self._attempt(question, temperature=0.0)
+                if cand.status == AnswerStatus.UNRESOLVED:
+                    # One second try: the first strict try sometimes gives no answer
+                    # where a freer second try gives a usable one.
+                    # Still checked against the page; a second 'no answer' stands.
+                    log.info("The AI gave no answer the first time; trying once more with a freer guess")
+                    cand = await self._attempt(question, temperature=0.7)
+                self._key_index = idx  # stick to the working key
+                return cand
+            except Exception as e:  # noqa: BLE001
+                if not _is_key_error(e) or n == len(keys) - 1:
+                    if _is_key_error(e) and len(keys) > 1:
+                        log.warning("All %d API keys failed; last error: %s", len(keys), e)
+                    raise
+                log.warning("API key %d of %d failed (%s); switching to the next key",
+                            idx + 1, len(keys), _key_err_summary(e))
 
     async def _attempt(self, question: Question, temperature: float) -> AnswerCandidate:
         url = self.settings.base_url.rstrip("/") + "/chat/completions"
@@ -153,7 +216,7 @@ class OpenAICompatibleSolver(BaseSolver):
             "temperature": temperature,
             "response_format": {"type": "json_object"},
         }
-        headers = {"Authorization": f"Bearer {self.settings.api_key}", "Content-Type": "application/json"}
+        headers = {"Authorization": f"Bearer {self._active_key or self.settings.api_key}", "Content-Type": "application/json"}
         start = time.monotonic()
         try:
             async with self._client() as client:
@@ -237,7 +300,7 @@ class GeminiSolver(BaseSolver):
     """Google Gemini answer client.
 
     Sign-up: API key from Google AI Studio (https://aistudio.google.com/apikey).
-    Set LLM_PROVIDER=gemini, MODEL_ID (e.g. gemini-2.0-flash), LLM_API_KEY.
+    Set LLM_PROVIDER=gemini, MODEL_ID (e.g. gemini-3.5-flash-lite), LLM_API_KEY.
     LLM_BASE_URL setting is honored (default: Google's v1beta address).
     """
 
@@ -248,6 +311,8 @@ class GeminiSolver(BaseSolver):
         self.timeout_sec = timeout_sec
         self._calls = 0
         self._latency_total = 0.0
+        self._key_index = 0  # sticky position in the failover pool
+        self._active_key: str | None = None
 
     @property
     def calls(self) -> int:
@@ -261,15 +326,29 @@ class GeminiSolver(BaseSolver):
         return httpx.AsyncClient(timeout=self.timeout_sec)
 
     async def solve(self, question: Question) -> AnswerCandidate:
-        if not self.settings.api_key:
-            raise RuntimeError("The secret key (LLM_API_KEY) is missing for 'gemini'. Get one at https://aistudio.google.com/apikey and add it to your .env file.")
-        cand = await self._attempt(question, temperature=0.0)
-        if cand.status == AnswerStatus.UNRESOLVED:
-            # One second try (see above): the first strict try sometimes gives
-            # no answer where a freer try answers. Still checked afterwards.
-            log.info("The AI gave no answer; trying once more with a freer guess")
-            cand = await self._attempt(question, temperature=0.7)
-        return cand
+        keys = _provider_keys(self.settings)
+        if not keys:
+            raise RuntimeError("The secret key (LLM_API_KEY) is missing for 'gemini'. Get one at https://aistudio.google.com/apikey and add it to your .env file (LLM_API_KEY, or several in LLM_API_KEYS for failover).")
+        start = self._key_index % len(keys)
+        for n in range(len(keys)):
+            idx = (start + n) % len(keys)
+            self._active_key = keys[idx]
+            try:
+                cand = await self._attempt(question, temperature=0.0)
+                if cand.status == AnswerStatus.UNRESOLVED:
+                    # One second try (see above): the first strict try sometimes gives
+                    # no answer where a freer try answers. Still checked afterwards.
+                    log.info("The AI gave no answer; trying once more with a freer guess")
+                    cand = await self._attempt(question, temperature=0.7)
+                self._key_index = idx  # stick to the working key
+                return cand
+            except Exception as e:  # noqa: BLE001
+                if not _is_key_error(e) or n == len(keys) - 1:
+                    if _is_key_error(e) and len(keys) > 1:
+                        log.warning("All %d API keys failed; last error: %s", len(keys), e)
+                    raise
+                log.warning("API key %d of %d failed (%s); switching to the next key",
+                            idx + 1, len(keys), _key_err_summary(e))
 
     async def _attempt(self, question: Question, temperature: float) -> AnswerCandidate:
         base = (self.settings.base_url or self.DEFAULT_BASE_URL).rstrip("/")
@@ -282,7 +361,7 @@ class GeminiSolver(BaseSolver):
             "generationConfig": {"temperature": temperature, "responseMimeType": "application/json",
                                  "maxOutputTokens": 1024},
         }
-        headers = {"x-goog-api-key": self.settings.api_key, "Content-Type": "application/json"}
+        headers = {"x-goog-api-key": self._active_key or self.settings.api_key, "Content-Type": "application/json"}
         start = time.monotonic()
         try:
             async with self._client() as client:
@@ -299,8 +378,9 @@ class GeminiSolver(BaseSolver):
         """Picture variant for the screenshot-fallback path (same choice checks)."""
         import base64
 
-        if not self.settings.api_key:
-            raise RuntimeError("The secret key (LLM_API_KEY) is missing for 'gemini'. Add it to your .env file.")
+        keys = _provider_keys(self.settings)
+        if not keys:
+            raise RuntimeError("The secret key (LLM_API_KEY) is missing for 'gemini'. Add it to your .env file (LLM_API_KEY, or several in LLM_API_KEYS for failover).")
         base = (self.settings.base_url or self.DEFAULT_BASE_URL).rstrip("/")
         if "generativelanguage.googleapis.com" not in base:
             base = self.DEFAULT_BASE_URL
@@ -315,12 +395,23 @@ class GeminiSolver(BaseSolver):
             "generationConfig": {"temperature": 0.0, "responseMimeType": "application/json",
                                  "maxOutputTokens": 1024},
         }
-        headers = {"x-goog-api-key": self.settings.api_key, "Content-Type": "application/json"}
-        async with httpx.AsyncClient(timeout=self.timeout_sec) as client:
-            resp = await client.post(url, json=payload, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
-        return _check_option_grounding(question, adopt_text_match(question, parse_gemini_response(data)))
+        headers = {"x-goog-api-key": self._active_key or keys[0], "Content-Type": "application/json"}
+        last_err: Exception | None = None
+        for n, key in enumerate(keys):
+            headers["x-goog-api-key"] = key
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout_sec) as client:
+                    resp = await client.post(url, json=payload, headers=headers)
+                    resp.raise_for_status()
+                    data = resp.json()
+                return _check_option_grounding(question, adopt_text_match(question, parse_gemini_response(data)))
+            except Exception as e:  # noqa: BLE001
+                if not _is_key_error(e) or n == len(keys) - 1:
+                    raise
+                log.warning("API key %d of %d failed (%s); switching to the next key",
+                            n + 1, len(keys), _key_err_summary(e))
+                last_err = e
+        raise last_err  # unreachable; kept for type-checkers
 
 
 def parse_gemini_response(data: dict) -> AnswerCandidate:
@@ -345,12 +436,37 @@ def parse_gemini_response(data: dict) -> AnswerCandidate:
         return AnswerCandidate(status=AnswerStatus.UNRESOLVED, explanation=f"the AI's reply was not usable: {e}")
 
 
+class GroqSolver(OpenAICompatibleSolver):
+    """Groq answer client (OpenAI-compatible API).
+
+    Sign-up: API key from Groq Console (https://console.groq.com/keys).
+    Set LLM_PROVIDER=groq, MODEL_ID (e.g. openai/gpt-oss-120b), LLM_API_KEY
+    (or several comma-separated keys in LLM_API_KEYS for automatic failover).
+    Defaults to https://api.groq.com/openai/v1 unless LLM_BASE_URL overrides it.
+    """
+
+    DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
+
+    async def solve(self, question: Question) -> AnswerCandidate:
+        if not _provider_keys(self.settings):
+            raise RuntimeError("The secret key (LLM_API_KEY) is missing for 'groq'. Get one at https://console.groq.com/keys and add it to your .env file (LLM_API_KEY, or several in LLM_API_KEYS for failover).")
+        return await super().solve(question)
+
+    async def _attempt(self, question: Question, temperature: float) -> AnswerCandidate:
+        if not (self.settings.base_url or "").strip() or \
+                self.settings.base_url.strip().rstrip("/") == "https://api.openai.com/v1":
+            self.settings.base_url = self.DEFAULT_BASE_URL
+        return await super()._attempt(question, temperature)
+
+
 def build_solver(settings: Settings) -> BaseSolver:
     provider = (settings.llm_provider or "mock").lower()
     if provider == "mock":
         return MockSolver(mode=settings.mock_mode)
     if provider == "gemini":
         return GeminiSolver(settings)
+    if provider == "groq":
+        return GroqSolver(settings)
     if provider in {"openai", "openai-compatible", "azure", "ollama", "vllm", "generic"}:
         return OpenAICompatibleSolver(settings)
-    raise ValueError(f"Unknown answer service '{settings.llm_provider}'. In your .env file set LLM_PROVIDER to 'mock', 'gemini' or 'openai'.")
+    raise ValueError(f"Unknown answer service '{settings.llm_provider}'. In your .env file set LLM_PROVIDER to 'mock', 'gemini', 'groq' or 'openai'.")

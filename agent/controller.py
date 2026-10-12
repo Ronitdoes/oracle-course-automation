@@ -43,8 +43,13 @@ class Controller:
         self.visited_urls: set[str] = set()
         self.pending_nav: str | None = None
         self.outline_url: str = ""
+        self.classes_url: str = ""
+        self.home_url: str = ""
         self.quizzes_done: int = 0
+        self.courses_done: int = 0
         self.current_section: str | None = None
+        self.current_course_title: str | None = None
+        self._return_to: str = ""
         self._nav_from = None
         self.errors: list[str] = []
         self._stop_requested = False
@@ -70,12 +75,16 @@ class Controller:
         return text
 
     def _plan_forward_walk(self, snap_before, cls, s, lobby_exit):
-        """Plan outline/lesson/lobby clicks, skipping already-finished sections.
+        """Plan home/hub/outline/lesson/lobby clicks, skipping finished work.
 
         Finished sections come from earlier runs (saved in the database, read
         fresh each visit). REDO_FINISHED_SECTIONS=true turns the skipping off.
+        Finished courses (My Classes hub titles) are always skipped, never
+        re-entered, so the hub walks each course once.
         """
+        from agent.action_planner import normalize_course_title
         finished: set[str] = set()
+        finished_courses: set[str] = set()
         if cls == PageState.OUTLINE and not s.redo_finished_sections:
             course = course_key_for_url(snap_before.url or "")
             if course:
@@ -83,7 +92,18 @@ class Controller:
                     finished = set(self.store.finished_sections(course))
                 except Exception as e:  # noqa: BLE001
                     log.debug("could not read finished sections: %s", e)
-        return plan_navigation(snap_before, cls, s, revisit=lobby_exit, finished=frozenset(finished))
+        if cls == PageState.CLASSES:
+            try:
+                done = self.store.finished_courses()
+                finished_courses = {normalize_course_title(k) for k in done.keys()}
+                # Also skip the course currently in progress this run when its
+                # outline already showed all-done but the DB write races hub.
+                # (DB is the source of truth; this set is read fresh each visit.)
+            except Exception as e:  # noqa: BLE001
+                log.debug("could not read finished courses: %s", e)
+        return plan_navigation(snap_before, cls, s, revisit=lobby_exit,
+                               finished=frozenset(finished),
+                               finished_courses=frozenset(finished_courses))
 
     async def run(self) -> dict:
         s = self.settings
@@ -120,14 +140,35 @@ class Controller:
                         self.sm.transition(AgentState.COMPLETED, "finished page detected - the quiz looks complete")
                     elif cls == PageState.QUESTION:
                         self.sm.transition(AgentState.EXTRACT, "a question is showing, will read it")
-                    elif cls == PageState.LESSON or cls == PageState.LOBBY or cls == PageState.OUTLINE:
+                    elif cls in (PageState.LESSON, PageState.LOBBY, PageState.OUTLINE,
+                                 PageState.HOME, PageState.CLASSES):
                         if cls == PageState.LESSON:
                             kind = "theory page"
                         elif cls == PageState.LOBBY:
                             kind = "quiz start page"
+                        elif cls == PageState.HOME:
+                            kind = "home page"
+                            if not self.home_url:
+                                self.home_url = snap_before.url or ""
+                        elif cls == PageState.CLASSES:
+                            kind = "My Classes hub"
+                            if not self.classes_url:
+                                self.classes_url = snap_before.url or ""
                         else:
                             kind = "course outline"
                             self.outline_url = snap_before.url or ""
+                            # Remember which course this outline belongs to for
+                            # course-level completion (hub needs its title).
+                            # Hub navigation already set it (card title); only
+                            # fill from the outline header in single-course mode.
+                            if not self.current_course_title:
+                                try:
+                                    from agent.action_planner import outline_course_title
+                                    t = outline_course_title(snap_before)
+                                    if t:
+                                        self.current_course_title = t
+                                except Exception:
+                                    pass
                         if not s.auto_advance_lessons:
                             await self._log_step("CLASSIFY", "", "", "", "", f"{kind} (walking forward is off)", 0,
                                                  f"{kind} needs AUTO_ADVANCE_LESSONS=true in the settings; stopping")
@@ -261,7 +302,9 @@ class Controller:
                     # Back on a lobby left before: its quiz is done, so plan
                     # the way out (Save Progress) instead of starting again.
                     lobby_exit = cls == PageState.LOBBY and url_key in self.visited_urls
-                    if cls != PageState.OUTLINE and url_key in self.visited_urls and not lobby_exit:
+                    # Outline, hub, and home are revisited by design (back after
+                    # each quiz/section/course), so only other pages use the loop guard.
+                    if cls not in (PageState.OUTLINE, PageState.CLASSES, PageState.HOME) and url_key in self.visited_urls and not lobby_exit:
                         await self._log_step("NAVIGATE", "", "", "", "", "already been on this page", 0,
                                              "already been on this page; stopping so it does not loop")
                         self.sm.transition(AgentState.STOPPED, "already been on this page; stopping so it does not loop")
@@ -271,8 +314,53 @@ class Controller:
                         await self._log_step("NAVIGATE", "", "", "", "", nav.reason, 0, nav.reason)
                         if "dry-run" in nav.reason:
                             self.sm.transition(AgentState.STOPPED, nav.reason)
-                        elif "no unfinished section found" in nav.reason:
-                            self.sm.transition(AgentState.COMPLETED, f"course complete: {nav.reason}")
+                        elif "no unfinished section found" in nav.reason and cls == PageState.OUTLINE:
+                            # Current course outline shows 100% everywhere:
+                            # record the course as done, then walk back to the
+                            # My Classes hub for the next course when known.
+                            # Record BOTH the hub card title (current) and the
+                            # outline header so dash variants / positional
+                            # fallbacks still match hub skipping next time.
+                            try:
+                                from agent.action_planner import normalize_course_title as _norm
+                                from agent.action_planner import outline_course_title as _ot
+                                titles = [self.current_course_title or "", _ot(snap_before)]
+                                if not s.dry_run:
+                                    for t in titles:
+                                        if t:
+                                            self.store.record_finished_course(_norm(t))
+                            except Exception as e:  # noqa: BLE001
+                                log.debug("could not record finished course: %s", e)
+                            self.courses_done += 1
+                            self.current_section = None
+                            if self.classes_url:
+                                self._return_to = self.classes_url
+                                self.sm.transition(AgentState.RETURNING,
+                                                   f"course complete ({self.current_course_title or 'outline'}), back to My Classes for the next course")
+                                self.current_course_title = None
+                            else:
+                                self.sm.transition(AgentState.COMPLETED, f"course complete: {nav.reason}")
+                        elif "already finished" in nav.reason and cls == PageState.OUTLINE and self.classes_url:
+                            # Redo guard hit inside a multi-course run: do not
+                            # loop on this outline; park it as done for hub
+                            # skipping and continue with the next course.
+                            try:
+                                from agent.action_planner import normalize_course_title as _norm2
+                                from agent.action_planner import outline_course_title as _ot2
+                                titles = [self.current_course_title or "", _ot2(snap_before)]
+                                if not s.dry_run:
+                                    for t in titles:
+                                        if t:
+                                            self.store.record_finished_course(_norm2(t))
+                            except Exception as e:  # noqa: BLE001
+                                log.debug("could not record finished course: %s", e)
+                            self._return_to = self.classes_url
+                            self.sm.transition(AgentState.RETURNING,
+                                               f"course already finished ({nav.reason}), back to My Classes for the next course")
+                            self.current_course_title = None
+                            self.current_section = None
+                        elif "no unfinished class found" in nav.reason:
+                            self.sm.transition(AgentState.COMPLETED, f"all classes complete: {nav.reason}")
                         elif "already finished" in nav.reason:
                             self.sm.transition(AgentState.STOPPED, nav.reason)
                         else:
@@ -281,7 +369,13 @@ class Controller:
                     pending_actions = nav.actions
                     if cls == PageState.OUTLINE and nav.actions:
                         self.current_section = section_key(nav.actions[0].button_name)
-                    self.pending_nav = " then ".join(a.button_name for a in nav.actions)
+                    if cls == PageState.CLASSES and nav.course_title:
+                        self.current_course_title = nav.course_title
+                    # Human-readable forward plan (hub shows the course title,
+                    # not just the repeated "Take Class").
+                    self.pending_nav = " then ".join(
+                        (a.label or a.button_name) + (f" #{a.occurrence + 1}" if a.occurrence else "")
+                        if (a.label or a.button_name) else "" for a in nav.actions)
                     await self._log_step("NAVIGATE", "", "", "", self.pending_nav,
                                          "forward clicks ready", 0, "")
                     if lobby_exit and not nav.blocked:
@@ -309,9 +403,12 @@ class Controller:
                             break
                         res = await browser_executor.execute(page, act)
                         self.actions_taken += 1
+                        act_label = (getattr(act, "label", "") or act.button_name or act.option_id or act.text[:40])
+                        if getattr(act, "occurrence", 0):
+                            act_label += f" #{act.occurrence + 1}"
                         await self._log_step("ACT", qid, "",
                                              _cand_str(candidate) if candidate else (f"forward clicks: {self.pending_nav}" if acting_on_nav else ""),
-                                             f"{act.type.value}:{act.option_id or act.button_name or act.text[:40]}",
+                                             f"{act.type.value}:{act.option_id or act_label or act.text[:40]}",
                                              res.message, 0, "" if res.ok else res.message)
                         if not res.ok:
                             ok_all = False
@@ -386,6 +483,7 @@ class Controller:
                             self.current_section = None
                         if s.auto_advance_lessons and self.outline_url:
                             self.quizzes_done += 1
+                            self._return_to = self.outline_url
                             self.sm.transition(AgentState.RETURNING, verdict_note + " - quiz finished, going back to the outline")
                         else:
                             self.sm.transition(AgentState.COMPLETED, verdict_note)
@@ -404,10 +502,10 @@ class Controller:
                             # Left a question behind for a non-question page
                             # (quiz submitted, site returned to lobby): count it.
                             self.questions_done += 1
-                        # Outline revisits are the normal way back after each
-                        # quiz, so only other pages count as walked for the
-                        # loop guard.
-                        if self._nav_from != PageState.OUTLINE:
+                        # Outline/hub/home revisits are the normal way back after
+                        # each quiz/section/course, so only other pages count as
+                        # walked for the loop guard.
+                        if self._nav_from not in (PageState.OUTLINE, PageState.CLASSES, PageState.HOME):
                             self.visited_urls.add(before.url or "")
                         snap_before = after
                         question, candidate, pending_actions = None, None, []
@@ -440,21 +538,28 @@ class Controller:
                             self.sm.transition(AgentState.STOPPED, verdict_note)
 
                 elif st == AgentState.RETURNING:
-                    if not self.outline_url:
+                    target = self._return_to or self.outline_url
+                    if not target:
                         self.sm.transition(AgentState.COMPLETED, "quiz finished and no outline to return to")
                     else:
+                        is_hub = target == self.classes_url
                         try:
-                            await self.session.goto(self.outline_url)
+                            await self.session.goto(target)
                         except Exception as e:  # noqa: BLE001
-                            await self._log_step("RETURNING", "", "", "", self.outline_url, "", 0,
-                                                 f"finished the quiz but could not get back to the outline ({e}); open it by hand and say go")
-                            self.sm.transition(AgentState.STOPPED, f"finished the quiz but could not get back to the outline ({e})")
+                            where = "My Classes hub" if is_hub else "the outline"
+                            await self._log_step("RETURNING", "", "", "", target, "", 0,
+                                                 f"finished work but could not get back to {where} ({e}); open it by hand and say go")
+                            self.sm.transition(AgentState.STOPPED, f"finished work but could not get back to {where} ({e})")
                             continue
-                        # Fresh slate for the next section; redo memory kept
-                        # so a finished section is never entered twice.
+                        # Fresh slate for the next section/course; redo memory kept
+                        # so finished sections/courses are never entered twice.
                         self.submitted_ids.clear()
                         self.recovery = RecoveryManager(max_retries=s.max_retries)
-                        self.sm.transition(AgentState.OBSERVE, "back on the course outline")
+                        self._return_to = ""
+                        if is_hub:
+                            self.sm.transition(AgentState.OBSERVE, "back on My Classes hub for the next course")
+                        else:
+                            self.sm.transition(AgentState.OBSERVE, "back on the course outline")
 
                 elif st == AgentState.RECOVER:
                     # Safe retry: check whether the last submit already worked before trying again.
@@ -494,6 +599,7 @@ class Controller:
             summary["final_state"] = final
             summary["navigations_done"] = self.navigations_done
             summary["quizzes_done"] = self.quizzes_done
+            summary["courses_done"] = self.courses_done
             return summary
         except Exception as e:  # noqa: BLE001 - never crash without persisting
             log.exception("The quiz helper stopped unexpectedly: %s", e)
@@ -509,6 +615,7 @@ class Controller:
                 summary["error"] = str(e)
                 summary["navigations_done"] = self.navigations_done
                 summary["quizzes_done"] = self.quizzes_done
+                summary["courses_done"] = self.courses_done
                 return summary
             except Exception:
                 return {"final_state": "FAILED", "error": str(e)}

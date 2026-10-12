@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8" /><title>Multi-Course Journey Fixture</title></head>
+<body>
+<main>
+  <!-- Stage home: Oracle Academy landing after login -->
+  <div class="stage" id="s-home">
+    <h1>Discover NEW Education Bytes!</h1>
+    <p>Oracle Academy has teamed up with Oracle Red Bull Racing to launch three exciting new Education Bytes.</p>
+    <h2>My Student Benefits</h2>
+    <div class="card">
+      <h3>My Classes</h3>
+      <a href="#classes" data-next="s-classes" data-hash="classes" id="myClassesLink">View course materials assigned by a faculty member</a>
+    </div>
+    <div class="card">
+      <h3>Student Tools</h3>
+      <p>Explore a library of tools to empower your learning</p>
+    </div>
+    <div class="card">
+      <h3>Free Resources Library</h3>
+      <p>Explore more opportunities to learn by visiting the Oracle Academy Free Resources Library</p>
+    </div>
+  </div>
+  <!-- Stage classes: My Classes hub with one Take Class button per course card -->
+  <div class="stage" id="s-classes" style="display:none">
+    <h1>Classes</h1>
+    <p>Home \ My Classes</p>
+    <div class="card">
+      <h3>Database Programming with SQL - English</h3>
+      <p>by Vineeta Soni on Database</p>
+      <p>Section-I3</p>
+      <button type="button" data-next="s-outline-sql" data-hash="outline-sql">Take Class</button>
+    </div>
+    <div class="card">
+      <h3>Database Programming with PLSQL - English</h3>
+      <p>by Vineeta Soni on Database</p>
+      <p>Section-I3</p>
+      <button type="button" data-next="s-outline-plsql" data-hash="outline-plsql">Take Class</button>
+    </div>
+  </div>
+  <!-- Stage outline-sql: first course already 100% everywhere -->
+  <div class="stage" id="s-outline-sql" style="display:none">
+    <h1>Database Programming with SQL - English</h1>
+    <p>Home \ My Classes \ Taking a Class</p>
+    <button type="button">Return</button>
+    <h2>Course Outline</h2>
+    <div><a href="#lesson1" class="sectionLink">Section 0 - Course Resources</a><span class="pct">100%</span></div>
+    <div><a href="#lesson1" class="sectionLink">Section 1 - Introduction</a><span class="pct">100%</span></div>
+    <div><a href="#lesson1" class="sectionLink">Database Programming with SQL Final Exam (S12-S20)</a><span class="pct">100%</span></div>
+    <div><a href="#lesson1" class="sectionLink">Database Programming with SQL Cumulative Final Exam (S1-S20)</a><span class="pct">100%</span></div>
+  </div>
+  <!-- Stage outline-plsql: second course has one open section -->
+  <div class="stage" id="s-outline-plsql" style="display:none">
+    <h1>Database Programming with PLSQL - English</h1>
+    <p>Home \ My Classes \ Taking a Class</p>
+    <button type="button">Return</button>
+    <h2>Course Outline</h2>
+    <div><a href="#lesson1" class="sectionLink">Section 0 - Course Resources</a><span class="pct">100%</span></div>
+    <div><a href="#lesson1" data-next="s-lesson1" data-hash="lesson1" class="sectionLink">Section 1 - Fundamentals</a><span class="pct">40%</span></div>
+  </div>
+  <!-- Stage lesson -->
+  <div class="stage" id="s-lesson1" style="display:none">
+    <h1>PL/SQL 1-1: Fundamentals (Lesson Slides)</h1>
+    <p>Reading material with no questions.</p>
+    <div>
+      <button type="button">Course</button>
+      <button type="button">Previous</button>
+      <button type="button" data-next="s-lobby" data-hash="lobby">Save and Continue ➜</button>
+    </div>
+  </div>
+  <!-- Stage lobby -->
+  <div class="stage" id="s-lobby" style="display:none">
+    <h1>Quiz: PL/SQL - Section 1</h1>
+    <p>Test what you learned in this section.</p>
+    <div>
+      <button type="button">Course</button>
+      <button type="button">Previous</button>
+      <button type="button" id="saveProgress">Save Progress</button>
+      <a href="#lobby" id="takeBtn">Take an Assessment</a>
+    </div>
+    <div id="startModal" role="dialog" aria-label="Begin quiz" style="display:none">
+      <p>This is your first of unlimited attempts.</p>
+      <p>Click Start to begin assessment.</p>
+      <button type="button" id="backBtn">Return to Course</button>
+      <button type="button" id="startBtn">Start</button>
+    </div>
+  </div>
+  <!-- Stage question -->
+  <div class="stage" id="s-q1" style="display:none">
+    <h2>Question 1 of 1</h2>
+    <p>What is 2 + 2?</p>
+    <div role="status">Choices - Just one correct!</div>
+    <div id="opts1">
+      <label><input type="radio" name="c1" /> 3</label>
+      <label><input type="radio" name="c1" /> 4</label>
+      <label><input type="radio" name="c1" /> 5</label>
+    </div>
+    <button type="button" class="answerBtn" data-next="s-done" data-hash="done" data-answer="1">Submit Answer</button>
+    <div class="result" role="alert" style="display:none"></div>
+  </div>
+  <!-- Stage done -->
+  <div id="s-done" data-completion style="display:none">
+    <h2>Quiz Complete!</h2><p>You finished all questions. Final score: 1/1</p>
+  </div>
+<script>
+function show(id, hash) {
+  document.querySelectorAll(".stage, #s-done").forEach(el => { el.style.display = "none"; });
+  document.getElementById(id).style.display = "";
+  if (hash) location.hash = hash;
+  if (id === "s-done") {
+    // Like the real course: finishing the quiz marks the open section done.
+    document.querySelectorAll("#s-outline-plsql .pct").forEach(el => { el.textContent = "100%"; });
+  }
+}
+document.querySelectorAll("[data-next]").forEach(el => {
+  el.addEventListener("click", (ev) => {
+    if (el.tagName === "A") ev.preventDefault();
+    show(el.dataset.next, el.dataset.hash);
+  });
+});
+document.getElementById("takeBtn").addEventListener("click", () => {
+  document.getElementById("startModal").style.display = "";
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") document.getElementById("startModal").style.display = "none";
+});
+document.getElementById("backBtn").addEventListener("click", () => {
+  document.getElementById("startModal").style.display = "none";
+});
+document.getElementById("startBtn").addEventListener("click", () => show("s-q1", "q1"));
+document.querySelectorAll(".answerBtn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const stage = btn.closest(".stage");
+    const boxes = [...stage.querySelectorAll("input[type=radio]")];
+    const sel = boxes.findIndex(b => b.checked);
+    const result = stage.querySelector(".result");
+    if (sel >= 0 && sel === parseInt(btn.dataset.answer, 10)) {
+      result.style.display = "";
+      result.textContent = "Correct! Accepted.";
+      btn.disabled = true;
+      setTimeout(() => { btn.disabled = false; show(btn.dataset.next, btn.dataset.hash); }, 300);
+    } else {
+      result.style.display = "";
+      result.textContent = "Incorrect, try again.";
+    }
+  });
+});
+function routeFromHash() {
+  const routed = (location.hash || "").replace("#", "");
+  if (routed === "home" || routed === "") show("s-home", "home");
+  if (routed === "classes") show("s-classes", "classes");
+  if (routed === "outline-sql") show("s-outline-sql", "outline-sql");
+  if (routed === "outline-plsql") show("s-outline-plsql", "outline-plsql");
+  if (routed === "lobby") show("s-lobby", "lobby");
+}
+window.addEventListener("hashchange", routeFromHash);
+routeFromHash();
+</script>
+</main>
+</body>
+</html>

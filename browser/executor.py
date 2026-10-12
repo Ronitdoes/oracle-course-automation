@@ -33,6 +33,13 @@ class Action:
     button_name: str = ""
     timeout_ms: int = 8000
     screenshot_path: str = ""
+    # Nth matching button/link with the same visible name (0-based).
+    # My Classes hub shows one identical "Take Class" button per course card,
+    # so the 2nd course needs occurrence=1 to avoid always clicking the first.
+    occurrence: int = 0
+    # Human display only, e.g. "Take Class - Database Programming with SQL".
+    # Never used for matching; matching uses button_name + occurrence.
+    label: str = ""
 
 
 @dataclass
@@ -67,7 +74,8 @@ async def execute(page: Page, action: Action) -> ActionResult:
         if action.type == ActionType.CLICK_BUTTON:
             return await _click_button_and_confirm(page, action.button_name, action.timeout_ms)
         if action.type == ActionType.NAVIGATE:
-            return await _navigate_click(page, action.button_name, action.timeout_ms)
+            return await _navigate_click(page, action.button_name, action.timeout_ms,
+                                         occurrence=action.occurrence)
         return ActionResult(ok=False, message=f"unknown step {action.type}. Next: report this to the helper's owner.")
     except Exception as e:  # noqa: BLE001
         log.warning("click/typing step %s did not work: %s", action.type, e)
@@ -245,7 +253,7 @@ async def _click_button(page: Page, name: str, timeout_ms: int) -> ActionResult:
     return ActionResult(ok=False, message=f"could not find a button called '{name}'. Next: check the page shows that button.")
 
 
-async def _navigate_click(page: Page, name: str, timeout_ms: int) -> ActionResult:
+async def _navigate_click(page: Page, name: str, timeout_ms: int, occurrence: int = 0) -> ActionResult:
     """Click a forward-walk button or section link by its exact visible name.
 
     Unlike submit clicks there are deliberately NO wordings or fallbacks here:
@@ -254,6 +262,9 @@ async def _navigate_click(page: Page, name: str, timeout_ms: int) -> ActionResul
     One exception: a stale pop-up box left open (e.g. from an earlier click)
     is dismissed with Escape first — but only when it holds nothing matching
     this click, so a live Start/confirm box is never touched.
+
+    occurrence picks the Nth matching button/link (0-based) for duplicate
+    names such as the My Classes hub's repeated "Take Class" buttons.
     """
     if not (name or "").strip():
         return ActionResult(ok=False, message="no forward button name was planned")
@@ -283,14 +294,45 @@ async def _navigate_click(page: Page, name: str, timeout_ms: int) -> ActionResul
         log.debug("pop-up check did not work: %s", e)
     for role in ("button", "link"):
         try:
-            loc = page.get_by_role(role, name=name).first
-            if await loc.count() == 0 or not await loc.is_visible():
+            all_loc = page.get_by_role(role, name=name)
+            try:
+                total = await all_loc.count()
+            except Exception:
                 continue
+            if total == 0:
+                continue
+            # Collect visible matches in order; occurrence picks the Nth one
+            # (My Classes hub repeats identical "Take Class" buttons).
+            target = None
+            seen = 0
+            for i in range(min(total, 20)):
+                try:
+                    cand = all_loc.nth(i)
+                    if not await cand.is_visible():
+                        continue
+                    if seen == occurrence:
+                        target = cand
+                        break
+                    seen += 1
+                except Exception:
+                    continue
+            if target is None:
+                # Fallback: first visible when occurrence out of range.
+                try:
+                    first = all_loc.first
+                    if await first.count() > 0 and await first.is_visible():
+                        target = first
+                    else:
+                        continue
+                except Exception:
+                    continue
+            loc = target
             if not await loc.is_enabled():
                 return ActionResult(ok=False, message=f"the '{name}' {role} is greyed out, so it cannot be clicked yet. Next: wait for the page to enable it.")
             await loc.scroll_into_view_if_needed(timeout=timeout_ms)
             await loc.click(timeout=timeout_ms)
-            return ActionResult(ok=True, message=f"clicked '{name}'")
+            extra = f" #{occurrence + 1}" if occurrence else ""
+            return ActionResult(ok=True, message=f"clicked '{name}'{extra}")
         except Exception as e:  # noqa: BLE001
             log.debug("forward click %r (%s) did not work: %s", name, role, e)
             continue

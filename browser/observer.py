@@ -149,6 +149,15 @@ async def observe(page: Page, screenshot_on_demand: bool = False,
                     if kind == "link" and (re.match(r"section\s+\d+", stripped, re.IGNORECASE)
                                            or "exam" in stripped.lower()):
                         hint = await _row_percent(item)
+                    elif "take class" in stripped.lower() and kind in ("button", "link"):
+                        # My Classes hub repeats identical "Take Class" buttons,
+                        # one per course card. Store the card's course title in
+                        # selector_hint so the planner can skip finished courses
+                        # by title and click the Nth button via occurrence.
+                        try:
+                            hint = await _take_class_course_title(item)
+                        except Exception:
+                            hint = ""
                     snap.controls.append(ControlInfo(kind=kind, name=name, visible=True,
                                                      selector_hint=hint,
                                                      enabled=await item.is_enabled()))
@@ -232,6 +241,50 @@ async def _row_percent(item) -> str:
         if found:
             return f"{found[-1]}%"
     return ""
+
+
+async def _take_class_course_title(item) -> str:
+    """Course title for a My Classes hub 'Take Class' button, or "".
+
+    Each course card holds a title ("Database Programming with SQL - English"),
+    a "by ..." line, a "Section-..." line, and its own Take Class button.
+    Walk up a few parents and pick the first title-like line so the planner
+    can skip finished courses by title and the executor can click the Nth
+    button via occurrence. Pure metadata: clicking still uses "Take Class".
+    """
+    try:
+        # Prefer an explicit heading inside the card when present.
+        for js in (
+            "e => { let el = e; for (let d = 0; d < 4 && el; d++) {"
+            " let h = el.parentElement ? el.parentElement.querySelector('h1,h2,h3,h4') : null;"
+            " if (h && (h.innerText || '').trim()) return (h.innerText || '').trim().slice(0,200);"
+            " el = el.parentElement; } return ''; }",
+            "e => { let el = e; for (let d = 0; d < 5 && el; d++) {"
+            " el = el.parentElement; if (!el) break;"
+            " let t = (el.innerText || '').trim();"
+            " if (t && t.length > 10 && t.length < 2000) return t.slice(0,1000); }"
+            " return ''; }",
+        ):
+            try:
+                raw = ((await item.evaluate(js)) or "").strip()
+            except Exception:
+                continue
+            if not raw:
+                continue
+            for line in [ln.strip() for ln in raw.splitlines() if ln.strip()]:
+                low = line.lower()
+                if "take class" in low:
+                    continue
+                if low.startswith("by ") or low.startswith("section-"):
+                    continue
+                if re.match(r"^section\s+\w+", low):
+                    continue
+                # First remaining line is the card title.
+                if len(line) >= 4:
+                    return line[:200]
+        return ""
+    except Exception:
+        return ""
 
 
 async def _generic_choice_fallback(page: Page, snap: PageSnapshot) -> None:

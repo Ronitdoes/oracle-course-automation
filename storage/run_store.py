@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS finished_sections (
   course TEXT, section TEXT, finished_at REAL,
   PRIMARY KEY (course, section)
 );
+CREATE TABLE IF NOT EXISTS finished_courses (
+  course TEXT PRIMARY KEY, finished_at REAL
+);
 """
 
 
@@ -106,6 +109,20 @@ class RunStore:
             return {}
         cur = self._conn.execute(
             "SELECT section, finished_at FROM finished_sections WHERE course=?", (course,))
+        return {row[0]: row[1] for row in cur.fetchall()}
+
+    def record_finished_course(self, course: str) -> None:
+        """Remember a fully completed course (My Classes hub title, normalized)."""
+        if not course:
+            return
+        self._conn.execute(
+            "INSERT OR REPLACE INTO finished_courses (course, finished_at) VALUES (?,?)",
+            (course, time.time()))
+        self._conn.commit()
+
+    def finished_courses(self) -> dict[str, float]:
+        """All fully completed courses: {normalized_title: finished_at}."""
+        cur = self._conn.execute("SELECT course, finished_at FROM finished_courses")
         return {row[0]: row[1] for row in cur.fetchall()}
 
     def close(self) -> None:

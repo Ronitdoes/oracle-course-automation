@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 
 from dotenv import load_dotenv
@@ -30,11 +31,19 @@ def _get_str(name: str, default: str = "") -> str:
     return os.getenv(name, default)
 
 
+def _parse_key_list(raw: str) -> list[str]:
+    """Split a key setting on commas/semicolons/newlines (single key -> one item)."""
+    return [p.strip() for p in re.split(r"[,;\n]+", raw or "") if p.strip()]
+
+
 @dataclass
 class Settings:
     llm_provider: str = field(default_factory=lambda: _get_str("LLM_PROVIDER", "mock"))
     model_id: str = field(default_factory=lambda: _get_str("MODEL_ID", "mock-model"))
     api_key: str = field(default_factory=lambda: _get_str("LLM_API_KEY", ""))
+    # Failover pool: LLM_API_KEYS (comma/semicolon/newline separated) plus
+    # LLM_API_KEY. First key tried first; api_key stays the first for compat.
+    api_keys: list[str] = field(default_factory=list)
     base_url: str = field(default_factory=lambda: _get_str("LLM_BASE_URL", "https://api.openai.com/v1"))
     mock_mode: str = field(default_factory=lambda: _get_str("MOCK_SOLVER_MODE", "auto"))
 
@@ -70,6 +79,13 @@ class Settings:
             self.allowed_domains = [d.strip().lower() for d in raw.split(",") if d.strip()]
         else:
             self.allowed_domains = []
+        combined: list[str] = []
+        for k in _parse_key_list(self.api_key) + _parse_key_list(_get_str("LLM_API_KEYS", "")):
+            if k not in combined:
+                combined.append(k)
+        self.api_keys = combined
+        if combined:
+            self.api_key = combined[0]
         self.llm_provider = (self.llm_provider or "mock").lower()
         self.connection_mode = (self.connection_mode or "launch").lower()
         self.log_level = (self.log_level or "INFO").upper()

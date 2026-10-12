@@ -41,5 +41,5 @@ async def capture(page: Page, settings: Settings, name: str = "fallback.png") ->
 
 def is_vision_enabled(settings: Settings) -> bool:
     # Picture-answering needs an explicitly picture-capable AI plan plus its secret key.
-    # Keep text-first by default; turn on with LLM_PROVIDER=openai|gemini plus an API key.
-    return settings.llm_provider in {"openai", "openai-compatible", "gemini"} and bool(settings.api_key)
+    # Keep text-first by default; turn on with LLM_PROVIDER=openai|groq|gemini plus an API key.
+    return settings.llm_provider in {"openai", "openai-compatible", "groq", "gemini"} and bool(settings.api_key)

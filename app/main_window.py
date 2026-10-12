@@ -213,7 +213,7 @@ class MainWindow(QMainWindow):
 
         self._goto("Run")
         self.setStatusBar(QStatusBar())
-        self.statusBar().showMessage("Ready. Open Oracle Academy, then press Start.")
+        self.statusBar().showMessage("Ready. Open Oracle Academy (My Classes / any course), then press Start.")
         self.extralog.connect(self._append_log)
         # Batched rendering: worker signals arrive fast; flushing every 200ms
         # in one layout pass keeps the UI smooth instead of re-laying out the
@@ -285,7 +285,7 @@ class MainWindow(QMainWindow):
         self._btn_academy.setObjectName("Ghost")
         self._btn_academy.clicked.connect(self._open_academy)
         urlrow.addWidget(self._btn_academy)
-        academy_hint = QLabel("Log in, open your quiz, keep that tab in front — then press Start.")
+        academy_hint = QLabel("Log in, open My Classes / any course outline / quiz, keep that tab in front — then press Start. Auto-advance walks Take Class → sections/exams → Finish Assessment across courses.")
         academy_hint.setObjectName("Muted")
         academy_hint.setWordWrap(True)
         urlrow.addWidget(academy_hint, 1)
@@ -295,7 +295,7 @@ class MainWindow(QMainWindow):
         self._ck_dry = QCheckBox("Dry run")
         self._ck_headed = QCheckBox("Show browser")
         self._ck_approval = QCheckBox("Require approval")
-        self._ck_lessons = QCheckBox("Auto-advance lessons")
+        self._ck_lessons = QCheckBox("Auto-advance lessons/courses")
         self._spin_max = QSpinBox()
         self._spin_max.setRange(1, 5000)
         self._spin_max.setValue(500)
@@ -472,9 +472,11 @@ class MainWindow(QMainWindow):
     def _on_progress(self, p: dict):
         q = int(p.get("questions_done", 0) or 0)
         mc = int(p.get("model_calls", 0) or 0)
+        quizzes = int(p.get("quizzes_done", 0) or 0)
+        courses = int(p.get("courses_done", 0) or 0)
         self._rule.setValue(min(q, self._max_q))
         note = str(p.get("last_note", "") or "").strip()
-        text = f"{q} answers  ·  {mc} model calls"
+        text = f"{q} answers  ·  {mc} model calls  ·  {quizzes} quizzes  ·  {courses} courses"
         if note and p.get("state") not in ("COMPLETED",):
             text += f"  ·  {note[:90]}"
         self._sub.setText(text)
@@ -539,9 +541,11 @@ class MainWindow(QMainWindow):
         self._set_pill(final)
         q = summary.get("questions_done", 0)
         mc = summary.get("model_calls", 0)
-        self._sub.setText(f"{q} answers  ·  {mc} model calls")
-        self.statusBar().showMessage(f"Ended: {final} — {q} questions, {mc} model calls.")
-        self._append_log(f"— ended: {final} ({q} questions, {mc} model calls)")
+        quizzes = summary.get("quizzes_done", 0)
+        courses = summary.get("courses_done", 0)
+        self._sub.setText(f"{q} answers  ·  {mc} model calls  ·  {quizzes} quizzes  ·  {courses} courses")
+        self.statusBar().showMessage(f"Ended: {final} — {q} questions, {quizzes} quizzes, {courses} courses, {mc} model calls.")
+        self._append_log(f"— ended: {final} ({q} questions, {quizzes} quizzes, {courses} courses, {mc} model calls)")
         err = str(summary.get("error", "") or "")
         if final == "FAILED" and "Executable doesn't exist" in err:
             self._offer_browser_install(err)

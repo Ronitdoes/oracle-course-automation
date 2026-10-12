@@ -22,6 +22,22 @@ def _section_links(snap: PageSnapshot) -> list[str]:
                                      or "exam" in (c.name or "").lower())]
 
 
+def _has_take_class(snap: PageSnapshot) -> bool:
+    return _has_button(snap, "take class")
+
+
+def _is_home(snap: PageSnapshot) -> bool:
+    low = (snap.visible_text or "").lower()
+    if "my student benefits" in low:
+        return True
+    if "my classes" in low and "student tools" in low and "free resources" in low:
+        return True
+    # Landing cards link out via "View course materials assigned by a faculty member".
+    if "view course materials" in low and _has_button(snap, "view course materials"):
+        return True
+    return False
+
+
 def classify(snap: PageSnapshot) -> PageState:
     if snap.is_loading and not snap.question_text and not snap.is_completion:
         return PageState.LOADING
@@ -34,7 +50,16 @@ def classify(snap: PageSnapshot) -> PageState:
     if _has_button(snap, "take an assessment"):
         return PageState.LOBBY
     if _has_button(snap, "save and continue") or _has_button(snap, "save progress"):
+        # My Classes hub has no Save buttons; outline/lesson pages do.
+        # Take Class hub check comes next so it cannot be mistaken here.
         return PageState.LESSON
+    # My Classes hub: one identical "Take Class" button per course card.
+    # No other page kind uses that wording ("Take an Assessment" is the lobby).
+    if _has_take_class(snap):
+        return PageState.CLASSES
+    # Oracle Academy landing after login (Discover banner + My Student Benefits).
+    if _is_home(snap):
+        return PageState.HOME
     if "course outline" in (snap.visible_text or "").lower() and _section_links(snap):
         return PageState.OUTLINE
     if snap.feedback_text and not snap.question_text:

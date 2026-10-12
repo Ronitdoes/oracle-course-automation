@@ -135,7 +135,7 @@ def test_setup_wizard_steers_fresh_install_to_real_key(tmp_path):
     try:
         v = dlg.values()
         assert v["LLM_PROVIDER"] == "gemini"
-        assert v["MODEL_ID"] == "gemini-2.0-flash"
+        assert v["MODEL_ID"] == "gemini-3.5-flash-lite"
         assert "aistudio" in dlg._key_hint.text()
         assert dlg.validate() == "missing-key"
         dlg._key.setText("test-key-123")
@@ -168,6 +168,24 @@ def test_setup_wizard_provider_switch_suggests_model():
     dlg = SetupWizard(_P("dummy.env"), {"LLM_PROVIDER": "mock", "MODEL_ID": "x"})
     try:
         dlg._model.clear()
+        dlg._provider.setCurrentText("openai")
+        assert dlg.values()["MODEL_ID"] == "gpt-4o-mini"
+    finally:
+        dlg.close()
+
+
+def test_setup_wizard_provider_switch_auto_selects_model():
+    """Switching provider auto-selects its default model (user only pastes the key)."""
+    _offscreen_app()
+    from app.dialogs import SetupWizard
+    from pathlib import Path as _P
+
+    dlg = SetupWizard(_P("dummy.env"), {"LLM_PROVIDER": "mock", "MODEL_ID": "x"})
+    try:
+        dlg._provider.setCurrentText("groq")
+        assert dlg.values()["MODEL_ID"] == "openai/gpt-oss-120b"
+        dlg._provider.setCurrentText("gemini")
+        assert dlg.values()["MODEL_ID"] == "gemini-3.5-flash-lite"
         dlg._provider.setCurrentText("openai")
         assert dlg.values()["MODEL_ID"] == "gpt-4o-mini"
     finally:

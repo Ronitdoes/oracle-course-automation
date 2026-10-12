@@ -79,6 +79,8 @@ class PageState(str, Enum):
     LESSON = "lesson"  # course theory page with a forward button (Save and Continue)
     LOBBY = "lobby"    # quiz start page with a Take an Assessment button
     OUTLINE = "outline"  # course outline listing sections with progress percents
+    HOME = "home"  # Oracle Academy landing with My Classes entry
+    CLASSES = "classes"  # My Classes hub listing Take Class buttons (one per course)
     AMBIGUOUS = "ambiguous"
 
 

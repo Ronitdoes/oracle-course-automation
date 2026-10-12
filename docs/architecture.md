@@ -88,7 +88,7 @@ diagnose what went wrong.
 - Pages that show no visible change after submitting give `UNCERTAIN` (an
   unclear result, reported honestly — the tool does not pretend it worked).
 - The screenshot backup path needs a picture-capable AI address
-  (an `openai`-compatible or `gemini` provider) plus its key configured.
+  (an `openai`-compatible, `groq`, or `gemini` provider) plus its key configured.
 - Attaching to an already-open browser (CDP attach) needs Chromium started
   with the `--remote-debugging-port` flag (a start-up option that opens the
   remote-control port); an ordinary browser window without that flag cannot be

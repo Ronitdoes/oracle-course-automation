@@ -102,9 +102,14 @@ PROVIDER_DEFAULTS: dict[str, dict[str, str]] = {
         "key_hint": "Practice mode works offline and needs no key.",
     },
     "gemini": {
-        "model": "gemini-2.0-flash",
+        "model": "gemini-3.5-flash-lite",
         "base": "https://generativelanguage.googleapis.com/v1beta",
         "key_hint": "Free key from Google AI Studio: https://aistudio.google.com/apikey",
+    },
+    "groq": {
+        "model": "openai/gpt-oss-120b",
+        "base": "https://api.groq.com/openai/v1",
+        "key_hint": "Free key from Groq Console: https://console.groq.com/keys",
     },
     "openai": {
         "model": "gpt-4o-mini",
@@ -134,7 +139,7 @@ class SetupWizard(QDialog):
         provider = (initial.get("LLM_PROVIDER") or "mock").strip().lower()
         if provider not in PROVIDER_DEFAULTS:
             provider = "mock"
-        if first_run and provider == "mock" and not (initial.get("LLM_API_KEY") or "").strip():
+        if first_run and provider == "mock" and not ((initial.get("LLM_API_KEY") or "").strip() or (initial.get("LLM_API_KEYS") or "").strip()):
             # Fresh installs come from the mock-flavoured example file; steer
             # new users at a real answer service instead of silent wrong
             # answers (mock only knows the practice page).
@@ -158,7 +163,7 @@ class SetupWizard(QDialog):
 
         self._provider = QComboBox()
         self._provider.setEditable(False)
-        self._provider.addItems(["gemini", "openai", "mock"])
+        self._provider.addItems(["gemini", "groq", "openai", "mock"])
         self._provider.setCurrentText(provider)
         lay.addWidget(QLabel("Provider"))
         lay.addWidget(self._provider)
@@ -172,6 +177,11 @@ class SetupWizard(QDialog):
         self._key.setPlaceholderText("paste your key here")
         lay.addWidget(QLabel("API key"))
         lay.addWidget(self._key)
+
+        self._keys_extra = QLineEdit()
+        self._keys_extra.setPlaceholderText("optional backup keys, comma-separated (auto-failover)")
+        lay.addWidget(QLabel("Backup API keys (failover, optional)"))
+        lay.addWidget(self._keys_extra)
 
         self._key_hint = QLabel("")
         self._key_hint.setObjectName("Muted")
@@ -189,7 +199,7 @@ class SetupWizard(QDialog):
         lay.addWidget(QLabel("Max questions"))
         lay.addWidget(self._max_q)
 
-        self._lessons = QCheckBox("Auto-advance lessons (walk the course by itself)")
+        self._lessons = QCheckBox("Auto-advance lessons/courses (walk My Classes by itself)")
         lay.addWidget(self._lessons)
         self._approval = QCheckBox("Require approval before each submit")
         lay.addWidget(self._approval)
@@ -198,6 +208,7 @@ class SetupWizard(QDialog):
         self._model.setText((initial.get("MODEL_ID") or "").strip()
                             or PROVIDER_DEFAULTS[provider]["model"])
         self._key.setText((initial.get("LLM_API_KEY") or "").strip())
+        self._keys_extra.setText((initial.get("LLM_API_KEYS") or "").strip())
         try:
             self._max_q.setValue(int(str(initial.get("MAX_QUESTIONS") or "500").strip() or "500"))
         except ValueError:
@@ -233,6 +244,7 @@ class SetupWizard(QDialog):
             "LLM_PROVIDER": self._provider.currentText().strip(),
             "MODEL_ID": self._model.text().strip(),
             "LLM_API_KEY": self._key.text().strip(),
+            "LLM_API_KEYS": self._keys_extra.text().strip(),
             "LLM_BASE_URL": self._base_url(),
             "MAX_QUESTIONS": str(self._max_q.value()),
             "AUTO_ADVANCE_LESSONS": "true" if self._lessons.isChecked() else "false",
@@ -244,7 +256,7 @@ class SetupWizard(QDialog):
         v = self.values()
         if not v["MODEL_ID"]:
             return "Model ID is empty."
-        if v["LLM_PROVIDER"] in ("gemini", "openai") and not v["LLM_API_KEY"]:
+        if v["LLM_PROVIDER"] in ("gemini", "groq", "openai") and not (v["LLM_API_KEY"] or v["LLM_API_KEYS"]):
             return "missing-key"
         return ""
 
@@ -254,8 +266,10 @@ class SetupWizard(QDialog):
 
     # -- UI wiring --
     def _on_provider_changed(self, name: str) -> None:
+        # Auto-select the default model for the chosen provider, so the user
+        # only has to paste the API key. Always refresh (not just when empty).
         name = (name or "").strip().lower()
-        if name in PROVIDER_DEFAULTS and not self._model.text().strip():
+        if name in PROVIDER_DEFAULTS:
             self._model.setText(PROVIDER_DEFAULTS[name]["model"])
         self._refresh_provider_hint()
 

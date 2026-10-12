@@ -19,13 +19,19 @@ class PlanResult:
     blocked: bool = False
     reason: str = ""
     needs_approval: bool = False
+    # My Classes hub choice metadata (title of the picked course card).
+    course_title: str = ""
 
 
 # Forward-only buttons the helper may click on lesson/lobby pages, in
 # preference order per page kind. Anything else — Previous, Return to Course,
 # Exit, Course — is never emitted, so the helper can only move forward.
 LOBBY_BUTTONS = ("Take an Assessment",)
-LESSON_BUTTONS = ("Save and Continue", "Save Progress")
+# Exam content pages (P15) show Finish Assessment as the forward submit;
+# Save Progress only saves and returns without completing, so it stays last.
+LESSON_BUTTONS = ("Save and Continue", "Finish Assessment", "Complete Assessment",
+                  "Submit Assessment", "Submit", "Finish", "Save Progress")
+HOME_BUTTONS = ("View course materials", "My Classes")
 
 NEVER_CLICK = ("previous", "return", "exit", "course")
 
@@ -74,6 +80,90 @@ def section_key(name: str) -> str:
     return re.sub(r"\s*\d+\s*%\s*$", "", name or "").strip()
 
 
+def normalize_course_title(title: str) -> str:
+    """Stable identity for a My Classes course card across runs.
+
+    Lower-cased, whitespace-collapsed, trailing progress numbers stripped,
+    so "Database Programming with SQL - English" matches itself even when
+    the hub card or outline header adds spacing or a percent.
+    """
+    t = re.sub(r"\s*\d+\s*%\s*$", "", (title or "").strip())
+    t = re.sub(r"\s+", " ", t).strip().lower()
+    return t
+
+
+def course_title_key(title: str) -> str:
+    return normalize_course_title(title)
+
+
+def _take_class_rows(snap: PageSnapshot) -> list[tuple[str, int]]:
+    """(course_title, occurrence) for each Take Class button, in page order.
+
+    occurrence is the Nth Take Class button (0-based) for the executor to
+    click, since every card reuses the identical visible name. Title comes
+    from the observer's selector_hint (card heading lookup). When the hint is
+    empty (live DOM without a heading), synthesize a stable positional title
+    so finished courses are still skipped by order rather than collapsing to
+    one identical name.
+    """
+    rows: list[tuple[str, int]] = []
+    occ = 0
+    for c in snap.controls:
+        name = (c.name or "").strip()
+        if c.kind not in ("button", "link", "submit"):
+            continue
+        if "take class" not in name.lower():
+            continue
+        raw_hint = (c.selector_hint or "").strip()
+        title = raw_hint or ""
+        # When the hint holds a whole card dump, keep the first title-like line.
+        if "\n" in title:
+            for line in [ln.strip() for ln in title.splitlines() if ln.strip()]:
+                low = line.lower()
+                if "take class" in low or low.startswith("by ") or low.startswith("section-"):
+                    continue
+                title = line
+                break
+        if not title or title.lower() == "take class":
+            # No card title readable: fall back to positional identity.
+            # Order is stable on the hub, so "#1, #2, ..." still walks each
+            # card once and skips finished ones by position across runs.
+            title = f"Take Class #{occ + 1}"
+            if raw_hint and raw_hint.lower() != "take class":
+                title = f"{raw_hint[:80]} (#{occ + 1})"
+                break
+        rows.append((title, occ))
+        occ += 1
+    return rows
+
+
+def _classes_seen(snap: PageSnapshot) -> str:
+    bits = []
+    for title, _ in _take_class_rows(snap):
+        bits.append(title[:80])
+    return "; ".join(bits[:8])
+
+
+def outline_course_title(snap: PageSnapshot) -> str:
+    """Course title from an outline page (first header-like line).
+
+    Live outline pages head with the course name
+    ("Database Programming with SQL - English") before the breadcrumb
+    ("Home \\ My Classes \\ Taking a Class"). Fixture pages share the shape.
+    """
+    lines = [(ln.strip()) for ln in (snap.visible_text or "").splitlines() if ln.strip()]
+    if not lines:
+        return ""
+    skip = {"course outline", "taking a class", "home", "my classes",
+            "home \\ my classes \\ taking a class", "home / my classes"}
+    for ln in lines[:5]:
+        if ln.lower() in skip:
+            continue
+        if len(ln) >= 4:
+            return ln[:200]
+    return lines[0][:200]
+
+
 def _outline_seen(snap: PageSnapshot) -> str:
     """Short summary of the outline for stop messages (what was seen)."""
     bits = []
@@ -94,16 +184,45 @@ def _match_button(snap: PageSnapshot, wants: tuple[str, ...]) -> str:
 
 
 def plan_navigation(snap: PageSnapshot, page_state: PageState, settings: Settings,
-                    revisit: bool = False, finished: frozenset[str] = frozenset()) -> PlanResult:
-    """Plan forward clicks for a lesson/lobby/outline page. Pure function.
+                    revisit: bool = False, finished: frozenset[str] = frozenset(),
+                    finished_courses: frozenset[str] = frozenset()) -> PlanResult:
+    """Plan forward clicks for a home/hub/lesson/lobby/outline page. Pure function.
 
     revisit=True means this lobby was already left once this run (its quiz
     was started from here): plan the way OUT (Save Progress) instead of
     starting the quiz again. finished holds outline entries already finished
     (recorded in earlier runs): they are skipped, never re-entered.
+    finished_courses holds normalized My Classes course titles already fully
+    completed: their Take Class cards are skipped, never re-entered.
     """
     actions: list[Action] = []
-    if page_state == PageState.LOBBY and revisit:
+    course_title = ""
+    if page_state == PageState.HOME:
+        entry = _match_button(snap, HOME_BUTTONS)
+        if not entry:
+            return PlanResult([], blocked=True,
+                              reason="home page has no My Classes entry (View course materials)")
+        actions = [Action(type=ActionType.NAVIGATE, button_name=entry,
+                          timeout_ms=settings.action_timeout_ms,
+                          label="My Classes")]
+    elif page_state == PageState.CLASSES:
+        rows = _take_class_rows(snap)
+        if not rows:
+            return PlanResult([], blocked=True, reason="My Classes hub has no Take Class buttons")
+        done_keys = {normalize_course_title(c) for c in finished_courses}
+        open_rows = [(t, occ) for t, occ in rows
+                     if normalize_course_title(t) not in done_keys]
+        if not open_rows:
+            seen = _classes_seen(snap)
+            return PlanResult([], blocked=True,
+                              reason=f"no unfinished class found on My Classes hub{(': ' + seen) if seen else ''}")
+        title, occ = open_rows[0]
+        course_title = section_key(title)
+        actions = [Action(type=ActionType.NAVIGATE, button_name="Take Class",
+                          timeout_ms=settings.action_timeout_ms,
+                          occurrence=occ,
+                          label=f"Take Class - {title[:80]}")]
+    elif page_state == PageState.LOBBY and revisit:
         leave = _match_button(snap, ("Save Progress",))
         if not leave:
             return PlanResult([], blocked=True,
@@ -140,15 +259,22 @@ def plan_navigation(snap: PageSnapshot, page_state: PageState, settings: Setting
                               reason=f"no unfinished section found on the course outline{(': ' + seen) if seen else ''}")
         actions = [Action(type=ActionType.NAVIGATE, button_name=section, timeout_ms=settings.action_timeout_ms)]
     else:
-        return PlanResult([], blocked=True, reason=f"not a lesson, quiz start, or outline page ({page_state.value})")
+        return PlanResult([], blocked=True, reason=f"not a home, hub, lesson, quiz start, or outline page ({page_state.value})")
     for a in actions:
         low = (a.button_name or "").lower()
-        if any(bad in low for bad in NEVER_CLICK):
+        # Backward-click guard: Previous / Return / Exit always refused.
+        # Bare "Course" refused (the breadcrumb button that walks away),
+        # but longer names containing "course" as ordinary words
+        # ("View course materials...") are allowed forward clicks.
+        if ("previous" in low or "return" in low or "exit" in low
+                or low.strip() == "course"):
             return PlanResult([], blocked=True, reason=f"refusing backward click '{a.button_name}'")
     if settings.dry_run:
-        return PlanResult(actions, blocked=True, reason="dry-run (preview mode): forward clicks prepared but not clicked")
+        return PlanResult(actions, blocked=True, reason="dry-run (preview mode): forward clicks prepared but not clicked",
+                          course_title=course_title)
     return PlanResult(actions, blocked=False, reason="forward clicks ready",
-                      needs_approval=bool(settings.require_approval))
+                      needs_approval=bool(settings.require_approval),
+                      course_title=course_title)
 
 
 def plan(question: Question, candidate: AnswerCandidate, settings: Settings,

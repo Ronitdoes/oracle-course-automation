@@ -126,8 +126,42 @@ def test_build_solver_routes_gemini():
 
     s = Settings()
     s.llm_provider = "gemini"
-    s.model_id = "gemini-2.0-flash"
+    s.model_id = "gemini-3.5-flash-lite"
     assert isinstance(build_solver(s), GeminiSolver)
+
+
+def test_build_solver_routes_groq_openai_compatible():
+    from config import Settings
+    from solver.llm_solver import GroqSolver, OpenAICompatibleSolver, build_solver
+
+    s = Settings()
+    s.llm_provider = "groq"
+    s.model_id = "openai/gpt-oss-120b"
+    s.api_key = "gsk-test"
+    sol = build_solver(s)
+    assert isinstance(sol, GroqSolver)
+    assert isinstance(sol, OpenAICompatibleSolver)
+    assert sol.DEFAULT_BASE_URL == "https://api.groq.com/openai/v1"
+
+
+def test_settings_combine_api_keys(monkeypatch):
+    from config import Settings
+
+    monkeypatch.setenv("LLM_API_KEY", "k1")
+    monkeypatch.setenv("LLM_API_KEYS", "k2, k1\nk3")
+    s = Settings()
+    assert s.api_keys == ["k1", "k2", "k3"]
+    assert s.api_key == "k1"
+
+
+def test_settings_plural_only_sets_primary(monkeypatch):
+    from config import Settings
+
+    monkeypatch.setenv("LLM_API_KEY", "")
+    monkeypatch.setenv("LLM_API_KEYS", "k1;k2")
+    s = Settings()
+    assert s.api_keys == ["k1", "k2"]
+    assert s.api_key == "k1"
 
 
 def test_discover_ambiguous_tabs():
@@ -331,3 +365,114 @@ def test_gemini_double_abstention_stands(monkeypatch):
     s.api_key = "k"
     cand = asyncio.run(GeminiSolver(s).solve(_q()))
     assert cand.status == AnswerStatus.UNRESOLVED
+
+
+def _openai_ok_response():
+    import httpx
+
+    return httpx.Response(200, json={"choices": [{"message": {"content":
+        '{"selected_option_id": "b", "explanation": "4", "confidence": 0.9, "status": "answered"}'}}]})
+
+
+def test_openai_failover_switches_key_and_sticks(monkeypatch):
+    import httpx
+
+    from config import Settings
+    from solver.llm_solver import OpenAICompatibleSolver
+
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers.get("authorization"))
+        if "bad-key" in (request.headers.get("authorization") or ""):
+            return httpx.Response(401, json={"error": {"message": "Incorrect API key"}})
+        return _openai_ok_response()
+
+    transport = httpx.MockTransport(handler)
+    monkeypatch.setattr(OpenAICompatibleSolver, "_client",
+                        lambda self: httpx.AsyncClient(transport=transport, base_url="http://test"))
+    s = Settings()
+    s.llm_provider = "openai"
+    s.model_id = "gpt-4o-mini"
+    s.api_key = "bad-key"
+    s.api_keys = ["bad-key", "good-key"]
+    solver = OpenAICompatibleSolver(s)
+    cand = asyncio.run(solver.solve(_q()))
+    assert cand.selected_option_id == "b", cand
+    assert solver.calls == 2  # 1 failed key + 1 working key
+    # Sticky: next question starts with the working key (one call, no failure).
+    cand2 = asyncio.run(solver.solve(_q()))
+    assert cand2.selected_option_id == "b", cand2
+    assert solver.calls == 3
+    assert seen[-1] == "Bearer good-key"
+
+
+def test_openai_all_keys_down_raises(monkeypatch):
+    import httpx
+
+    from config import Settings
+    from solver.llm_solver import OpenAICompatibleSolver
+
+    def handler(request):
+        return httpx.Response(401, json={"error": {"message": "Incorrect API key"}})
+
+    transport = httpx.MockTransport(handler)
+    monkeypatch.setattr(OpenAICompatibleSolver, "_client",
+                        lambda self: httpx.AsyncClient(transport=transport, base_url="http://test"))
+    s = Settings()
+    s.llm_provider = "openai"
+    s.model_id = "gpt-4o-mini"
+    s.api_key = "bad-1"
+    s.api_keys = ["bad-1", "bad-2"]
+    with pytest.raises(httpx.HTTPStatusError):
+        asyncio.run(OpenAICompatibleSolver(s).solve(_q()))
+
+
+def test_openai_non_key_error_does_not_burn_pool(monkeypatch):
+    import httpx
+
+    from config import Settings
+    from solver.llm_solver import OpenAICompatibleSolver
+
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(404, json={"error": {"message": "model not found"}})
+
+    transport = httpx.MockTransport(handler)
+    monkeypatch.setattr(OpenAICompatibleSolver, "_client",
+                        lambda self: httpx.AsyncClient(transport=transport, base_url="http://test"))
+    s = Settings()
+    s.llm_provider = "openai"
+    s.model_id = "nope"
+    s.api_key = "k1"
+    s.api_keys = ["k1", "k2"]
+    with pytest.raises(httpx.HTTPStatusError):
+        asyncio.run(OpenAICompatibleSolver(s).solve(_q()))
+    assert len(calls) == 1  # wrong model fails on every key: raise at once
+
+
+def test_gemini_failover_switches_key(monkeypatch):
+    import httpx
+
+    from config import Settings
+    from solver.llm_solver import GeminiSolver
+
+    def handler(request):
+        if "bad-key" in (request.headers.get("x-goog-api-key") or ""):
+            return httpx.Response(429, json={"error": {"message": "quota exceeded"}})
+        text = '{"selected_option_id": "b", "status": "answered", "explanation": "4", "confidence": 0.9}'
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": text}]}}]})
+
+    transport = httpx.MockTransport(handler)
+    monkeypatch.setattr(GeminiSolver, "_client",
+                        lambda self: httpx.AsyncClient(transport=transport, base_url="http://test"))
+    s = Settings()
+    s.llm_provider = "gemini"
+    s.model_id = "gemini-3.5-flash-lite"
+    s.api_key = "bad-key"
+    s.api_keys = ["bad-key", "good-key"]
+    solver = GeminiSolver(s)
+    cand = asyncio.run(solver.solve(_q()))
+    assert cand.selected_option_id == "b", cand

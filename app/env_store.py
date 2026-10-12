@@ -5,21 +5,22 @@ import os
 from pathlib import Path
 
 KNOWN_KEYS: list[str] = [
-    "LLM_PROVIDER", "MODEL_ID", "LLM_API_KEY", "LLM_BASE_URL", "MOCK_SOLVER_MODE",
+    "LLM_PROVIDER", "MODEL_ID", "LLM_API_KEY", "LLM_API_KEYS", "LLM_BASE_URL", "MOCK_SOLVER_MODE",
     "TARGET_URL", "ALLOWED_DOMAINS",
     "HEADLESS", "BROWSER_CONNECTION_MODE", "CDP_ENDPOINT",
     "NAVIGATION_TIMEOUT_MS", "ACTION_TIMEOUT_MS",
     "MAX_QUESTIONS", "MAX_RETRIES", "MAX_ACTIONS", "RUN_MAX_DURATION_SEC",
     "SCREENSHOT_DIR", "DATABASE_PATH", "LOG_LEVEL",
-    "DRY_RUN", "REQUIRE_APPROVAL", "AUTO_ADVANCE_LESSONS",
+    "DRY_RUN", "REQUIRE_APPROVAL", "AUTO_ADVANCE_LESSONS", "REDO_FINISHED_SECTIONS",
     "REDACT_QUESTION_TEXT_IN_LOGS", "PERSIST_QUESTION_TEXT",
 ]
 
 # (key, label, kind, choices?) — kind: text|password|bool|int|combo
 FIELD_SPECS: list[tuple] = [
-    ("LLM_PROVIDER", "Provider", "combo", ["mock", "gemini", "openai"]),
+    ("LLM_PROVIDER", "Provider", "combo", ["mock", "gemini", "groq", "openai"]),
     ("MODEL_ID", "Model ID", "text", None),
     ("LLM_API_KEY", "API key", "password", None),
+    ("LLM_API_KEYS", "Backup API keys (failover, comma-separated)", "text", None),
     ("LLM_BASE_URL", "Base URL", "text", None),
     ("MOCK_SOLVER_MODE", "Mock mode", "combo", ["auto", "unresolved"]),
     ("TARGET_URL", "Target URL", "text", None),
@@ -38,19 +39,20 @@ FIELD_SPECS: list[tuple] = [
     ("LOG_LEVEL", "Log level", "combo", ["DEBUG", "INFO", "WARNING", "ERROR"]),
     ("DRY_RUN", "Dry run (never submit)", "bool", None),
     ("REQUIRE_APPROVAL", "Require approval", "bool", None),
-    ("AUTO_ADVANCE_LESSONS", "Auto-advance lessons", "bool", None),
+    ("AUTO_ADVANCE_LESSONS", "Auto-advance lessons + courses", "bool", None),
+    ("REDO_FINISHED_SECTIONS", "Redo finished sections/courses", "bool", None),
     ("REDACT_QUESTION_TEXT_IN_LOGS", "Redact questions in logs", "bool", None),
     ("PERSIST_QUESTION_TEXT", "Persist question text", "bool", None),
 ]
 
 GROUPS: list[tuple[str, list[str]]] = [
-    ("Model", ["LLM_PROVIDER", "MODEL_ID", "LLM_API_KEY", "LLM_BASE_URL", "MOCK_SOLVER_MODE"]),
+    ("Model", ["LLM_PROVIDER", "MODEL_ID", "LLM_API_KEY", "LLM_API_KEYS", "LLM_BASE_URL", "MOCK_SOLVER_MODE"]),
     ("Target", ["TARGET_URL", "ALLOWED_DOMAINS"]),
     ("Browser", ["HEADLESS", "BROWSER_CONNECTION_MODE", "CDP_ENDPOINT",
                  "NAVIGATION_TIMEOUT_MS", "ACTION_TIMEOUT_MS"]),
     ("Limits", ["MAX_QUESTIONS", "MAX_RETRIES", "MAX_ACTIONS", "RUN_MAX_DURATION_SEC"]),
     ("Storage", ["SCREENSHOT_DIR", "DATABASE_PATH", "LOG_LEVEL"]),
-    ("Safety & privacy", ["DRY_RUN", "REQUIRE_APPROVAL", "AUTO_ADVANCE_LESSONS",
+    ("Safety & privacy", ["DRY_RUN", "REQUIRE_APPROVAL", "AUTO_ADVANCE_LESSONS", "REDO_FINISHED_SECTIONS",
                           "REDACT_QUESTION_TEXT_IN_LOGS", "PERSIST_QUESTION_TEXT"]),
 ]
 

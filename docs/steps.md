@@ -88,7 +88,7 @@ Phases were executed in order; each phase ended with its tests passing.
 
 - `perception/visual_perception.py` (saves a picture of the visible part of
   the page — the viewport, meaning what is currently on screen; reading that
-  picture with AI happens only when an `openai`-compatible or `gemini`
+  picture with AI happens only when an `openai`-compatible, `groq`, or `gemini`
   provider plus its API key — its password for the AI service — is configured;
   otherwise it reports explicitly "unavailable" so the main loop goes to
   RECOVER instead of acting blindly).

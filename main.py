@@ -94,6 +94,7 @@ async def amain() -> int:
     print(f"\nHow it ended: {summary.get('final_state')}")
     print(f"Questions done: {summary.get('questions_done')}")
     print(f"Quizzes done: {summary.get('quizzes_done', 0)}")
+    print(f"Courses done: {summary.get('courses_done', 0)}")
     print(f"Pages walked: {summary.get('navigations_done', 0)}")
     print(f"AI answers requested: {summary.get('model_calls')}")
     for step in summary.get("steps", [])[-15:]:

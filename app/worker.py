@@ -42,7 +42,7 @@ class _SignalLogHandler(logging.Handler):
 
 class RunWorker(QThread):
     step = Signal(dict)        # {state, question_id, answer, action, verification, error}
-    progress = Signal(dict)    # {state, questions_done, model_calls, actions_taken}
+    progress = Signal(dict)    # {state, questions_done, quizzes_done, courses_done, model_calls, actions_taken}
     logline = Signal(str)
     approval_needed = Signal(dict)  # {kind: question|nav, ...}
     finished = Signal(dict)    # controller summary
@@ -88,7 +88,8 @@ class RunWorker(QThread):
         except Exception as e:  # noqa: BLE001
             log.exception("Run worker failed: %s", e)
             summary = {"final_state": "FAILED", "error": str(e), "steps": [],
-                       "questions_done": 0, "model_calls": 0}
+                       "questions_done": 0, "quizzes_done": 0, "courses_done": 0,
+                       "model_calls": 0}
         self.finished.emit(summary)
 
     async def _arun(self) -> dict:
@@ -120,6 +121,8 @@ class RunWorker(QThread):
                     self.progress.emit({
                         "state": getattr(sm, "value", str(sm)) if sm else state,
                         "questions_done": self._controller.questions_done,
+                        "quizzes_done": self._controller.quizzes_done,
+                        "courses_done": self._controller.courses_done,
                         "model_calls": self._controller.model_calls,
                         "actions_taken": self._controller.actions_taken,
                         # Last check result, so the UI can show WHY a run is
@@ -132,6 +135,7 @@ class RunWorker(QThread):
 
             self._controller._log_step = _wrapped  # type: ignore[method-assign]
             self.progress.emit({"state": "INITIALIZE", "questions_done": 0,
+                                "quizzes_done": 0, "courses_done": 0,
                                 "model_calls": 0, "actions_taken": 0, "last_note": ""})
             return await self._controller.run()
         finally:

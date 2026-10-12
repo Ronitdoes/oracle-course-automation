@@ -48,10 +48,11 @@ These are the settings inside your `.env` settings file. Each setting is a named
 
 | Var | Default | Purpose |
 |---|---|---|
-| `LLM_PROVIDER` | `mock` | Which answer source to use: `mock` (built-in pretend answers for offline practice, no internet needed), `gemini` (Google's AI service), or `openai` (a standard-compatible AI service) |
-| `MODEL_ID` | `mock-model` | The name of the AI model to ask, for the provider above |
-| `LLM_API_KEY` | `` | Secret password for the AI service (called an API key) — required for the `gemini` and `openai` providers (the setup wizard asks for it on first launch) |
-| `LLM_BASE_URL` | `https://api.openai.com/v1` | Alternate web address to ask for answers, only if you use a different AI host (examples: Microsoft Azure, Ollama for running AI on your own computer, vLLM for hosting AI yourself) |
+| `LLM_PROVIDER` | `mock` | Which answer source to use: `mock` (built-in pretend answers for offline practice, no internet needed), `gemini` (Google's AI service), `groq` (Groq's OpenAI-compatible API), or `openai` (a standard-compatible AI service) |
+| `MODEL_ID` | `mock-model` | The name of the AI model to ask, for the provider above (defaults auto-selected by the setup wizard: `gemini-3.5-flash-lite`, `openai/gpt-oss-120b`, `gpt-4o-mini`) |
+| `LLM_API_KEY` | `` | Secret password for the AI service (called an API key) — required for the `gemini`, `groq`, and `openai` providers (the setup wizard asks for it on first launch; Groq keys come from https://console.groq.com/keys) |
+| `LLM_API_KEYS` | `` | Extra API keys for automatic failover (comma/semicolon/newline separated) — if one key fails (bad key, spent quota, provider hiccup) the agent switches to the next without breaking the run and sticks to the working key; tried in order, first key first |
+| `LLM_BASE_URL` | `https://api.openai.com/v1` | Alternate web address to ask for answers, only if you use a different AI host (examples: Microsoft Azure, Ollama for running AI on your own computer, vLLM for hosting AI yourself; Groq defaults to `https://api.groq.com/openai/v1` when `LLM_PROVIDER=groq`) |
 | `MOCK_SOLVER_MODE` | `auto` | For practice answers only: `auto` answers the sample page normally; `unresolved` pretends it does not know, to force the backup-fix path (called recovery) for testing |
 | `TARGET_URL` | `` | The web page to automate (`file://…` web addresses work for the sample page) |
 | `ALLOWED_DOMAINS` | `` | Safety list of allowed websites (comma-separated); empty = no restriction, it may visit any page |
@@ -105,6 +106,15 @@ With `AUTO_ADVANCE_LESSONS=true` in `.env`, the helper starts from a theory (les
 4. Then it answers questions exactly as in questions-only mode.
 5. When the quiz is done and the course sends it back to the quiz card, it leaves via **Save Progress** (never starting the same quiz twice) and goes back to the outline for the next unfinished section, until no sections remain. Finished sections are remembered in the history file — even if the outline still shows one open — so it never redoes a finished section. If that ever blocks something it shouldn't, `REDO_FINISHED_SECTIONS=true` turns the memory off.
 
+## Walking all My Classes (home → hub → every course)
+
+Still with `AUTO_ADVANCE_LESSONS=true`, start at the Oracle Academy landing page (or the My Classes hub) and the helper walks every course in turn:
+
+1. On the home page (`My Student Benefits`) it clicks **My Classes** (`View course materials assigned by a faculty member`).
+2. On the **My Classes** hub it clicks the first **Take Class** whose course title is not yet recorded as fully complete (e.g. `Database Programming with SQL – English`, then `Database Programming with PLSQL – English`, `Database Foundations`, `Database Design`). Identical buttons are told apart by card order (`occurrence`), and the card title is read from the button's own card so finished courses are skipped by normalized title across runs.
+3. Inside each course it does the whole-course walk above (all sections, midterms, final and cumulative exams). When that outline shows 100% everywhere, the course title is recorded in the history file (`finished_courses`) and the helper goes back to the hub for the next unfinished **Take Class**, until the hub reports `no unfinished class found`.
+4. Starting directly on one outline keeps the old single-course behaviour (no hub needed).
+
 Rules that keep this safe: it only ever clicks forward buttons — Previous, Return to Course/Exit, and Course are never clicked. If it ever returns to a page it already walked, it stops instead of looping. In preview mode (`DRY_RUN=true`) it lists the planned clicks without clicking; with `REQUIRE_APPROVAL=true` it asks you before each set of clicks. Without the setting (default), it stops on the first theory/quiz-start page and tells you to turn it on.
 
 ## Desktop app (Windows)
@@ -157,7 +167,7 @@ The sample page (fixture — the bundled practice quiz at `tests/fixture/quiz.ht
 |---|---|
 | `TARGET_URL is not set` | Copy `.env.example` to `.env` (your settings file), then set `TARGET_URL` inside it |
 | `playwright: Executable doesn't exist` | The automated browser is not downloaded yet — in the desktop app press **Install now**, or run `playwright install chromium` |
-| `Unknown LLM_PROVIDER` | Use `mock` (built-in practice answers), `gemini` (Google's AI service), or `openai` (standard AI service) |
+| `Unknown LLM_PROVIDER` | Use `mock` (built-in practice answers), `gemini` (Google's AI service), `groq` (Groq's API), or `openai` (standard AI service) |
 | `LLM_API_KEY is not set` | Put your AI-service secret password (API key) in `.env`, or stay on `mock` (no key needed) |
 | Stuck on `RECOVER` | It is stuck on its backup-fix step — look at the saved pictures in `artifacts/screenshots` (the saved-output folder), and turn on detailed logging with `LOG_LEVEL=DEBUG` |
 | `STOPPED … unsupported` | The page has a format the question-reader marks `UNSUPPORTED` (meaning "not supported") — this is on purpose (by design) |
