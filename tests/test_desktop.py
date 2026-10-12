@@ -160,6 +160,24 @@ def test_setup_wizard_mock_needs_no_key(tmp_path):
         dlg.close()
 
 
+def test_setup_wizard_first_run_fixes_mock_model_mismatch(tmp_path):
+    """Fresh installs copy the mock-flavoured example (mock-model) then steer
+    to gemini: the model field must follow, never provider=gemini + model=mock-model."""
+    _offscreen_app()
+    from app.dialogs import SetupWizard
+
+    dlg = SetupWizard(tmp_path / ".env",
+                      {"LLM_PROVIDER": "mock", "MODEL_ID": "mock-model",
+                       "LLM_API_KEY": "", "LLM_API_KEYS": ""},
+                      first_run=True)
+    try:
+        v = dlg.values()
+        assert v["LLM_PROVIDER"] == "gemini"
+        assert v["MODEL_ID"] == "gemini-3.5-flash-lite"
+    finally:
+        dlg.close()
+
+
 def test_setup_wizard_provider_switch_suggests_model():
     _offscreen_app()
     from app.dialogs import SetupWizard

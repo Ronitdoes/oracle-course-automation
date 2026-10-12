@@ -205,8 +205,14 @@ class SetupWizard(QDialog):
         lay.addWidget(self._approval)
 
         # Seed from the existing file, falling back to provider suggestions.
-        self._model.setText((initial.get("MODEL_ID") or "").strip()
-                            or PROVIDER_DEFAULTS[provider]["model"])
+        # A leftover mock default with a real provider (fresh installs copy the
+        # mock-flavoured example file, then steer to gemini) is fixed to that
+        # provider's model instead of showing a mismatched pair like
+        # provider=gemini + model=mock-model.
+        _seed_model = (initial.get("MODEL_ID") or "").strip()
+        if not _seed_model or (provider != "mock" and _seed_model == "mock-model"):
+            _seed_model = PROVIDER_DEFAULTS[provider]["model"]
+        self._model.setText(_seed_model)
         self._key.setText((initial.get("LLM_API_KEY") or "").strip())
         self._keys_extra.setText((initial.get("LLM_API_KEYS") or "").strip())
         try:
