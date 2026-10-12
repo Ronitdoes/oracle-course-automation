@@ -8,6 +8,17 @@ Browser Agent is a Windows app that works through your Oracle Academy courses fo
 2. Run it. It installs for your user only (no admin rights needed).
 3. Open **Browser Agent** from the Start Menu.
 
+## Windows says this app is unsafe?
+
+You may see a blue SmartScreen box saying Windows protected your PC. This is normal for a small independent app. It appears because the app is **unsigned** (no paid publisher certificate yet) — not because anything was found wrong with it.
+
+To install anyway:
+
+1. Click **More info**.
+2. Click **Run anyway**.
+
+The file properties now show the real publisher name (Browser Agent, v1.0.0). A paid code-signing certificate is the only thing that removes this warning completely — planned for a later release.
+
 ## First-time setup
 
 When you first open the app, a setup window asks for two things:

@@ -77,6 +77,7 @@ exe = EXE(
     upx=True,
     console=False,  # windowed: no terminal window
     icon='assets/app.ico',
+    version='version-info.txt',
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
