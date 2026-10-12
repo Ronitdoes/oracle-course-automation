@@ -1,8 +1,18 @@
-# AI Browser Agent (MVP — first working version)
+# Browser Agent
 
 This tool uses Playwright (a tool that controls a web browser automatically) to work through a quiz page. It reads the page's underlying structure (called the DOM — basically the text and buttons as the browser sees them, listed first because that is the main method), picks out the question, asks an AI model (called an LLM — large language model — which you can choose in settings) for the answer, clicks or types the answer by finding buttons and boxes by their visible labels, checks that the page moved to the next question, and repeats until done. If reading the page structure is unclear, it falls back to looking at a screenshot picture of the page.
 
-## Quickstart
+## Download (Windows, no Python needed)
+
+Get `BrowserAgent-Setup-*.exe` from **[Releases](https://github.com/Ronitdoes/oracle-course-automation/releases/latest)**, run it (per-user install, no admin rights), and launch **Browser Agent** from the Start Menu.
+
+What happens on first launch:
+
+1. A setup wizard asks for your AI key (it shows where to get one) plus basic run settings — saved locally, never uploaded.
+2. Press **Open Oracle Academy**, log in, and open your quiz in that browser tab.
+3. Press **Start**. The app drives your open tab and works through the course outline (sections and midterm/final exams alike) until everything reaches 100%.
+
+## Quickstart (terminal, from source)
 
 These steps set up and start the tool. Type each line in your terminal (the text window for commands):
 
@@ -40,7 +50,7 @@ These are the settings inside your `.env` settings file. Each setting is a named
 |---|---|---|
 | `LLM_PROVIDER` | `mock` | Which answer source to use: `mock` (built-in pretend answers for offline practice, no internet needed), `gemini` (Google's AI service), or `openai` (a standard-compatible AI service) |
 | `MODEL_ID` | `mock-model` | The name of the AI model to ask, for the provider above |
-| `LLM_API_KEY` | `` | Secret password for the AI service (called an API key) — required for the `openai` provider |
+| `LLM_API_KEY` | `` | Secret password for the AI service (called an API key) — required for the `gemini` and `openai` providers (the setup wizard asks for it on first launch) |
 | `LLM_BASE_URL` | `https://api.openai.com/v1` | Alternate web address to ask for answers, only if you use a different AI host (examples: Microsoft Azure, Ollama for running AI on your own computer, vLLM for hosting AI yourself) |
 | `MOCK_SOLVER_MODE` | `auto` | For practice answers only: `auto` answers the sample page normally; `unresolved` pretends it does not know, to force the backup-fix path (called recovery) for testing |
 | `TARGET_URL` | `` | The web page to automate (`file://…` web addresses work for the sample page) |
@@ -99,17 +109,18 @@ Rules that keep this safe: it only ever clicks forward buttons — Previous, Ret
 
 ## Desktop app (Windows)
 
-Minimal editorial GUI over the same engine (`PySide6`):
+Run / History / Settings pages. Approvals appear as dialogs instead of
+terminal prompts. Settings edits `.env` locally; keys are never logged.
+The **Setup** button on the Run page re-opens the first-run wizard anytime.
+
+Prefer to run from source instead of the installer?
 
 ```bash
 pip install -r requirements.txt
 python -m app.main
 ```
 
-Run / History / Settings pages. Approvals appear as dialogs instead of
-terminal prompts. Settings edits `.env` locally; keys are never logged.
-
-Installable app (no Python needed on the target machine):
+Prefer to build the installer yourself?
 
 ```bat
 build_installer.bat
@@ -145,8 +156,8 @@ The sample page (fixture — the bundled practice quiz at `tests/fixture/quiz.ht
 | What you see (symptom) | What to do (fix) |
 |---|---|
 | `TARGET_URL is not set` | Copy `.env.example` to `.env` (your settings file), then set `TARGET_URL` inside it |
-| `playwright: Executable doesn't exist` | The automated browser is not downloaded yet — run `playwright install chromium` |
-| `Unknown LLM_PROVIDER` | Use `mock` (built-in practice answers) or `openai` (standard AI service) |
+| `playwright: Executable doesn't exist` | The automated browser is not downloaded yet — in the desktop app press **Install now**, or run `playwright install chromium` |
+| `Unknown LLM_PROVIDER` | Use `mock` (built-in practice answers), `gemini` (Google's AI service), or `openai` (standard AI service) |
 | `LLM_API_KEY is not set` | Put your AI-service secret password (API key) in `.env`, or stay on `mock` (no key needed) |
 | Stuck on `RECOVER` | It is stuck on its backup-fix step — look at the saved pictures in `artifacts/screenshots` (the saved-output folder), and turn on detailed logging with `LOG_LEVEL=DEBUG` |
 | `STOPPED … unsupported` | The page has a format the question-reader marks `UNSUPPORTED` (meaning "not supported") — this is on purpose (by design) |
