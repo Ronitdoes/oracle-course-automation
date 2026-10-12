@@ -150,7 +150,7 @@ class MainWindow(QMainWindow):
         self._root = _project_root()
         self._worker: RunWorker | None = None
         self._run_active = False
-        self._max_q = 20
+        self._max_q = 500
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -289,8 +289,8 @@ class MainWindow(QMainWindow):
         self._ck_approval = QCheckBox("Require approval")
         self._ck_lessons = QCheckBox("Auto-advance lessons")
         self._spin_max = QSpinBox()
-        self._spin_max.setRange(1, 500)
-        self._spin_max.setValue(20)
+        self._spin_max.setRange(1, 5000)
+        self._spin_max.setValue(500)
         self._spin_max.setPrefix("Max ")
         for c in (self._ck_dry, self._ck_headed, self._ck_approval, self._ck_lessons):
             opts.addWidget(c)
@@ -305,7 +305,7 @@ class MainWindow(QMainWindow):
         self._rule = QProgressBar()
         self._rule.setObjectName("Rule")
         self._rule.setTextVisible(False)
-        self._rule.setRange(0, 20)
+        self._rule.setRange(0, 500)
         self._rule.setValue(0)
         prow.addWidget(self._rule)
         self._sub = QLabel("0 answers  ·  0 model calls")
@@ -344,7 +344,7 @@ class MainWindow(QMainWindow):
         self._ck_approval.setChecked(str_to_bool(vals.get("REQUIRE_APPROVAL", "false")))
         self._ck_lessons.setChecked(str_to_bool(vals.get("AUTO_ADVANCE_LESSONS", "false")))
         try:
-            self._spin_max.setValue(int(vals.get("MAX_QUESTIONS", "20")))
+            self._spin_max.setValue(int(vals.get("MAX_QUESTIONS", "500")))
         except ValueError:
             pass
         self._max_q = self._spin_max.value()

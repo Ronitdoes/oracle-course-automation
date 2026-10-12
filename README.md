@@ -48,7 +48,7 @@ These are the settings inside your `.env` settings file. Each setting is a named
 | `HEADLESS` | `true` | Whether the browser window is hidden: `true` runs invisibly in the background; `false` shows the window so you can watch it click (called headed mode, useful for fixing problems) |
 | `BROWSER_CONNECTION_MODE` | `launch` | How the tool opens the browser: `launch` (starts a fresh browser itself) or `cdp` (connects to a browser you already started; CDP means Chrome DevTools Protocol — a built-in remote-control connection — and that browser must have been started with the `--remote-debugging-port` flag) |
 | `CDP_ENDPOINT` | `http://localhost:9222` | The address of that already-open browser; only used when `BROWSER_CONNECTION_MODE=cdp` |
-| `MAX_QUESTIONS` / `MAX_ACTIONS` / `RUN_MAX_DURATION_SEC` | `20/50/300` | Safety stop limits: stop after this many questions, this many clicks/typing steps, or this many seconds |
+| `MAX_QUESTIONS` / `MAX_ACTIONS` / `RUN_MAX_DURATION_SEC` | `500/500/300` | Safety stop limits: stop after this many questions, this many clicks/typing steps, or this many seconds |
 | `MAX_RETRIES` | `2` | How many times to retry a failed step before giving up |
 | `NAVIGATION_TIMEOUT_MS` / `ACTION_TIMEOUT_MS` | `15000/8000` | Longest time to wait for a page to load / for a click to work, in milliseconds (thousandths of a second); the tool waits only as long as needed, never a fixed pause |
 | `SCREENSHOT_DIR` / `DATABASE_PATH` | `./artifacts/...` | Where to save problem-solving pictures (screenshots) and history; the folders under `./artifacts/` (the saved-output folder) hold these, and history is kept in SQLite (a simple file-based record-keeper, no separate server needed) |
@@ -89,7 +89,7 @@ Safety: allowed-websites list (domain allowlist), practice mode that never submi
 
 With `AUTO_ADVANCE_LESSONS=true` in `.env`, the helper starts from a theory (lesson) page and walks forward by itself:
 
-1. On the course outline it opens the first section that is not at 100% (a missing number counts as unfinished too) — section quizzes and final exams alike. If everything is finished it stops and tells you.
+1. On the course outline it opens the first section that is not at 100% (a missing number counts as unfinished too) — sections and exams alike (midterm, final, cumulative). If everything is finished it stops and tells you.
 2. On reading pages it clicks **Save and Continue** (or Save Progress).
 3. On the quiz card page it clicks **Take an Assessment**, then **Start** in the pop-up box.
 4. Then it answers questions exactly as in questions-only mode.

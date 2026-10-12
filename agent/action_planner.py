@@ -49,16 +49,17 @@ def _trailing_percent(text: str) -> int | None:
 def _outline_rows(snap: PageSnapshot) -> list[tuple[str, int | None]]:
     """(name, percent) for each clickable course row, in page order.
 
-    Matches numbered sections ("Section 8 - ...") as well as final-exam rows
-    ("... Final Exam ...") so exams can be refused explicitly instead of
-    silently ignored. Percent comes from the row itself; None when not shown.
+    Matches numbered sections ("Section 8 - ...") as well as exam rows
+    ("... Final Exam ...", "... Midterm Exam ...", "... Cumulative ... Exam ...")
+    so exams can be refused explicitly instead of silently ignored. Percent
+    comes from the row itself; None when not shown.
     """
     rows = []
     for c in snap.controls:
         name = (c.name or "").strip()
         if c.kind != "link" or not name:
             continue
-        if not (re.match(r"section\s+\d+", name, re.IGNORECASE) or "final exam" in name.lower()):
+        if not (re.match(r"section\s+\d+", name, re.IGNORECASE) or "exam" in name.lower()):
             continue
         pct = _section_percent(c.selector_hint)
         if pct is None:

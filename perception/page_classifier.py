@@ -18,7 +18,8 @@ def _has_button(snap: PageSnapshot, needle: str) -> bool:
 
 def _section_links(snap: PageSnapshot) -> list[str]:
     return [(c.name or "").strip() for c in snap.controls
-            if c.kind == "link" and re.match(r"section\s+\d+", (c.name or "").strip(), re.IGNORECASE)]
+            if c.kind == "link" and (re.match(r"section\s+\d+", (c.name or "").strip(), re.IGNORECASE)
+                                     or "exam" in (c.name or "").lower())]
 
 
 def classify(snap: PageSnapshot) -> PageState:

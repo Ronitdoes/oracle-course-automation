@@ -47,9 +47,9 @@ class Settings:
     navigation_timeout_ms: int = field(default_factory=lambda: _get_int("NAVIGATION_TIMEOUT_MS", 15000))
     action_timeout_ms: int = field(default_factory=lambda: _get_int("ACTION_TIMEOUT_MS", 8000))
 
-    max_questions: int = field(default_factory=lambda: _get_int("MAX_QUESTIONS", 20))
+    max_questions: int = field(default_factory=lambda: _get_int("MAX_QUESTIONS", 500))
     max_retries: int = field(default_factory=lambda: _get_int("MAX_RETRIES", 2))
-    max_actions: int = field(default_factory=lambda: _get_int("MAX_ACTIONS", 50))
+    max_actions: int = field(default_factory=lambda: _get_int("MAX_ACTIONS", 500))
     run_max_duration_sec: int = field(default_factory=lambda: _get_int("RUN_MAX_DURATION_SEC", 300))
 
     screenshot_dir: str = field(default_factory=lambda: _get_str("SCREENSHOT_DIR", "./artifacts/screenshots"))

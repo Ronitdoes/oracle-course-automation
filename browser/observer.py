@@ -145,7 +145,9 @@ async def observe(page: Page, screenshot_on_demand: bool = False,
                                 name = ""
                     name = html.unescape(name)
                     hint = ""
-                    if kind == "link" and re.match(r"section\s+\d+", name.strip(), re.IGNORECASE):
+                    stripped = name.strip()
+                    if kind == "link" and (re.match(r"section\s+\d+", stripped, re.IGNORECASE)
+                                           or "exam" in stripped.lower()):
                         hint = await _row_percent(item)
                     snap.controls.append(ControlInfo(kind=kind, name=name, visible=True,
                                                      selector_hint=hint,
