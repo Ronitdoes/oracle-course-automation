@@ -98,6 +98,22 @@ class BrowserSession:
             await self._page.wait_for_load_state("domcontentloaded")
         return self._page
 
+    async def goto(self, url: str) -> Page:
+        """Open an address in the current tab (used to walk back to the
+        course outline between sections). Same safety as start-up: addresses
+        outside the allowed list are refused before anything loads."""
+        if not url:
+            raise ValueError("No address given to open.")
+        if not self.settings.is_domain_allowed(url):
+            raise PermissionError(
+                f"Opening {url!r} is blocked by ALLOWED_DOMAINS={self.settings.allowed_domains}")
+        if self._page is None:
+            raise RuntimeError("Browser is not open yet. It should have been opened first.")
+        log.info("Opening page %s", _redact_url(url))
+        await self._page.goto(url, wait_until="domcontentloaded")
+        await self._page.wait_for_load_state("domcontentloaded")
+        return self._page
+
     async def screenshot(self, name: str = "shot.png") -> str:
         if self._page is None:
             raise RuntimeError("Browser is not open yet. It should have been opened first.")

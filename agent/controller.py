@@ -17,7 +17,7 @@ from perception import page_classifier, question_extractor, visual_perception
 from solver.base import validate_candidate
 from solver.llm_solver import build_solver
 from solver.schemas import AnswerCandidate, PageSnapshot, PageState, Question
-from storage.run_store import RunStore
+from storage.run_store import RunStore, course_key_for_url
 from verification.verifier import Verdict, verify
 
 log = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ class Controller:
         self.pending_nav: str | None = None
         self.outline_url: str = ""
         self.quizzes_done: int = 0
-        self.entered_sections: set[str] = set()
+        self.current_section: str | None = None
         self._nav_from = None
         self.errors: list[str] = []
         self._stop_requested = False
@@ -68,6 +68,22 @@ class Controller:
         if self.settings.redact_question_text:
             return "[redacted]"
         return text
+
+    def _plan_forward_walk(self, snap_before, cls, s, lobby_exit):
+        """Plan outline/lesson/lobby clicks, skipping already-finished sections.
+
+        Finished sections come from earlier runs (saved in the database, read
+        fresh each visit). REDO_FINISHED_SECTIONS=true turns the skipping off.
+        """
+        finished: set[str] = set()
+        if cls == PageState.OUTLINE and not s.redo_finished_sections:
+            course = course_key_for_url(snap_before.url or "")
+            if course:
+                try:
+                    finished = set(self.store.finished_sections(course))
+                except Exception as e:  # noqa: BLE001
+                    log.debug("could not read finished sections: %s", e)
+        return plan_navigation(snap_before, cls, s, revisit=lobby_exit, finished=frozenset(finished))
 
     async def run(self) -> dict:
         s = self.settings
@@ -242,31 +258,37 @@ class Controller:
                     cls = page_classifier.classify(snap_before)
                     self._nav_from = cls
                     url_key = snap_before.url or ""
-                    if cls != PageState.OUTLINE and url_key in self.visited_urls:
+                    # Back on a lobby left before: its quiz is done, so plan
+                    # the way out (Save Progress) instead of starting again.
+                    lobby_exit = cls == PageState.LOBBY and url_key in self.visited_urls
+                    if cls != PageState.OUTLINE and url_key in self.visited_urls and not lobby_exit:
                         await self._log_step("NAVIGATE", "", "", "", "", "already been on this page", 0,
                                              "already been on this page; stopping so it does not loop")
                         self.sm.transition(AgentState.STOPPED, "already been on this page; stopping so it does not loop")
                         continue
-                    nav = plan_navigation(snap_before, cls, s)
+                    nav = self._plan_forward_walk(snap_before, cls, s, lobby_exit)
                     if nav.blocked:
                         await self._log_step("NAVIGATE", "", "", "", "", nav.reason, 0, nav.reason)
                         if "dry-run" in nav.reason:
                             self.sm.transition(AgentState.STOPPED, nav.reason)
                         elif "no unfinished section found" in nav.reason:
                             self.sm.transition(AgentState.COMPLETED, f"course complete: {nav.reason}")
+                        elif "already finished" in nav.reason:
+                            self.sm.transition(AgentState.STOPPED, nav.reason)
                         else:
                             self.sm.transition(AgentState.RECOVER, nav.reason)
                         continue
-                    if cls == PageState.OUTLINE and nav.actions and section_key(nav.actions[0].button_name) in self.entered_sections:
-                        reason = (f"already walked into '{nav.actions[0].button_name}' and finished its quiz once; "
-                                  "stopping so it does not redo it")
-                        await self._log_step("NAVIGATE", "", "", "", nav.actions[0].button_name, reason, 0, reason)
-                        self.sm.transition(AgentState.STOPPED, reason)
-                        continue
                     pending_actions = nav.actions
+                    if cls == PageState.OUTLINE and nav.actions:
+                        self.current_section = section_key(nav.actions[0].button_name)
                     self.pending_nav = " then ".join(a.button_name for a in nav.actions)
                     await self._log_step("NAVIGATE", "", "", "", self.pending_nav,
                                          "forward clicks ready", 0, "")
+                    if lobby_exit and not nav.blocked:
+                        # Leaving a finished quiz behind: fresh answer memory
+                        # for the next one (question numbers repeat per quiz).
+                        self.submitted_ids.clear()
+                        self.recovery = RecoveryManager(max_retries=s.max_retries)
                     if nav.needs_approval or s.require_approval:
                         self.sm.transition(AgentState.AWAIT_APPROVAL, "forward clicks need your approval")
                     else:
@@ -354,6 +376,14 @@ class Controller:
                         question, candidate, pending_actions = None, None, []
                         self.pending_nav = None
                         self._nav_from = None
+                        if self.current_section and not s.dry_run:
+                            try:
+                                course = course_key_for_url(self.outline_url)
+                                if course:
+                                    self.store.record_finished_section(course, self.current_section)
+                            except Exception as e:  # noqa: BLE001
+                                log.debug("could not record finished section: %s", e)
+                            self.current_section = None
                         if s.auto_advance_lessons and self.outline_url:
                             self.quizzes_done += 1
                             self.sm.transition(AgentState.RETURNING, verdict_note + " - quiz finished, going back to the outline")
@@ -370,14 +400,15 @@ class Controller:
                         # the next loop looks again anyway (cheap and safe).
                     elif result.verdict == Verdict.NAVIGATED:
                         self.navigations_done += 1
+                        if before.question_id:
+                            # Left a question behind for a non-question page
+                            # (quiz submitted, site returned to lobby): count it.
+                            self.questions_done += 1
                         # Outline revisits are the normal way back after each
                         # quiz, so only other pages count as walked for the
-                        # loop guard. Entering a section is remembered by name
-                        # so a finished one is never redone.
+                        # loop guard.
                         if self._nav_from != PageState.OUTLINE:
                             self.visited_urls.add(before.url or "")
-                        elif self.pending_nav:
-                            self.entered_sections.add(section_key(self.pending_nav))
                         snap_before = after
                         question, candidate, pending_actions = None, None, []
                         self.pending_nav = None
@@ -427,6 +458,12 @@ class Controller:
 
                 elif st == AgentState.RECOVER:
                     # Safe retry: check whether the last submit already worked before trying again.
+                    # First give a loading page a moment to settle: re-looking
+                    # instantly often catches it mid-load with no buttons yet.
+                    try:
+                        await page.wait_for_timeout(2500)
+                    except Exception:
+                        pass
                     fresh = await observe(page)
                     if snap_before is not None and fresh.question_id != snap_before.question_id and fresh.question_id:
                         snap_before = fresh

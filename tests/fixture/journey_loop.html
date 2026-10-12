@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8" /><title>Quiz Loop Fixture</title></head>
+<body>
+<main>
+  <!-- Quiz lobby. After a finished quiz the course returns here; the helper
+       must then leave via Save Progress instead of starting again. -->
+  <div class="stage" id="s-lobby">
+    <h1>Quiz: PL/SQL - Section 7</h1>
+    <p>Test what you learned in this section.</p>
+    <div>
+      <button type="button">Course</button>
+      <button type="button">Previous</button>
+      <button type="button" id="saveProgress" data-next="s-outline" data-hash="outline">Save Progress</button>
+      <a href="#lobby" id="takeBtn">Take an Assessment</a>
+    </div>
+    <div id="startModal" role="dialog" aria-label="Begin quiz" style="display:none">
+      <p>This is your first of unlimited attempts.</p>
+      <p>Click Start to begin assessment.</p>
+      <button type="button" id="backBtn">Return to Course</button>
+      <button type="button" id="startBtn">Start</button>
+    </div>
+  </div>
+  <!-- Single question (mock solver knows 2+2). A correct submit returns to
+       the lobby, like the real course does when the quiz is finished. -->
+  <div class="stage" id="s-q1" style="display:none">
+    <h2>Question 1 of 1</h2>
+    <p>What is 2 + 2?</p>
+    <div role="status">Choices - Just one correct!</div>
+    <div id="opts1">
+      <label><input type="radio" name="c1" /> 3</label>
+      <label><input type="radio" name="c1" /> 4</label>
+      <label><input type="radio" name="c1" /> 5</label>
+    </div>
+    <button type="button" class="answerBtn" data-answer="1">Submit Answer</button>
+    <div class="result" role="alert" style="display:none"></div>
+  </div>
+  <!-- Course outline: the single section already records finished. -->
+  <div class="stage" id="s-outline" style="display:none">
+    <h1>Database Programming with PLSQL - English</h1>
+    <p>Home \ My Classes \ Taking a Class</p>
+    <button type="button">Return</button>
+    <h2>Course Outline</h2>
+    <div><a href="#outline" class="sectionLink">Section 7 - Exception Handling</a><span class="pct">100%</span></div>
+  </div>
+<script>
+function show(id, hash) {
+  document.querySelectorAll(".stage").forEach(el => { el.style.display = "none"; });
+  document.getElementById(id).style.display = "";
+  location.hash = hash;
+  if (id === "s-lobby" && window.__quizDone) {
+    // Simulate the slow load after a finished quiz: lobby buttons appear late.
+    document.querySelectorAll("#s-lobby button, #s-lobby a").forEach(el => { el.style.display = "none"; });
+    setTimeout(() => {
+      document.querySelectorAll("#s-lobby button, #s-lobby a").forEach(el => { el.style.display = ""; });
+    }, 1200);
+  }
+}
+document.getElementById("takeBtn").addEventListener("click", () => {
+  document.getElementById("startModal").style.display = "";
+});
+document.getElementById("backBtn").addEventListener("click", () => {
+  document.getElementById("startModal").style.display = "none";
+});
+document.getElementById("startBtn").addEventListener("click", () => show("s-q1", "q1"));
+document.getElementById("saveProgress").addEventListener("click", () => show("s-outline", "outline"));
+document.querySelectorAll(".answerBtn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const stage = btn.closest(".stage");
+    const boxes = [...stage.querySelectorAll("input[type=radio]")];
+    const sel = boxes.findIndex(b => b.checked);
+    const result = stage.querySelector(".result");
+    if (sel >= 0 && sel === parseInt(btn.dataset.answer, 10)) {
+      window.__quizDone = true;
+      result.style.display = "";
+      result.textContent = "Correct! Accepted.";
+      btn.disabled = true;
+      setTimeout(() => { btn.disabled = false; show("s-lobby", "lobby"); }, 300);
+    } else {
+      result.style.display = "";
+      result.textContent = "Incorrect, try again.";
+    }
+  });
+});
+// Escape dismisses the pop-up, like the real site.
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") document.getElementById("startModal").style.display = "none";
+});
+// ?slow=1: first paint has no clickable controls yet (slow load). The helper
+// must wait out the unclear page instead of stalling on it.
+if (new URLSearchParams(location.search).get("slow") === "1") {
+  document.querySelectorAll("#s-lobby button, #s-lobby a").forEach(el => { el.style.display = "none"; });
+  setTimeout(() => {
+    document.querySelectorAll("#s-lobby button, #s-lobby a").forEach(el => { el.style.display = ""; });
+  }, 2500);
+}
+</script>
+</main>
+</body>
+</html>

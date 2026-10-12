@@ -351,14 +351,14 @@ def test_plan_outline_blank_counts_as_unfinished():
     assert res.actions[0].button_name == "Section 8 - Using and Managing Procedures"
 
 
-def test_plan_outline_refuses_final_exam():
+def test_plan_outline_opens_final_exam_like_any_section():
     from agent.action_planner import plan_navigation
 
     res = plan_navigation(_exam_snap(), PageState.OUTLINE, Settings())
-    # Section 7 is done; the next unfinished row is the final exam: stop.
-    assert res.blocked
-    assert "final exam" in res.reason.lower()
-    assert res.actions == []
+    # Section 7 is done; the next unfinished row is the final exam: open it.
+    assert not res.blocked, res.reason
+    assert len(res.actions) == 1
+    assert "Final Exam" in res.actions[0].button_name
 
 
 def test_plan_outline_skips_done_exam_for_open_section():
@@ -376,6 +376,61 @@ def test_plan_outline_skips_done_exam_for_open_section():
     assert res.actions[0].button_name == "Section 8 - Using and Managing Procedures"
 
 
+def test_plan_outline_skips_finished_sections():
+    from agent.action_planner import plan_navigation
+
+    snap = PageSnapshot(
+        url="http://course/outline", title="Course", visible_text="Course Outline",
+        controls=[
+            ControlInfo(kind="link", name="Section 7 - Exception Handling", selector_hint="100%"),
+            ControlInfo(kind="link", name="Section 8 - Using and Managing Procedures", selector_hint=""),
+        ])
+    finished = frozenset({"Section 8 - Using and Managing Procedures"})
+    res = plan_navigation(snap, PageState.OUTLINE, Settings(), finished=finished)
+    assert res.blocked
+    assert "already finished" in res.reason
+    assert "Section 8" in res.reason
+
+
+def test_plan_outline_skips_finished_exam_picks_section():
+    # A finished final exam is skipped like anything finished; the open
+    # section after it is still picked.
+    from agent.action_planner import plan_navigation
+
+    snap = _exam_snap()
+    finished = frozenset({"Database Programming with PL/SQL Semester 1 Final Exam (S5-S9)"})
+    res = plan_navigation(snap, PageState.OUTLINE, Settings(), finished=finished)
+    assert not res.blocked, res.reason
+    assert res.actions[0].button_name == "Section 8 - Using and Managing Procedures"
+
+
+def test_plan_outline_percent_inside_link_name_counts():
+    # The number can hide at the end of the link name itself (live pages do
+    # this): such a row still counts as finished, not as "no number shown".
+    from agent.action_planner import plan_navigation
+
+    snap = PageSnapshot(
+        url="http://course/outline", title="Course", visible_text="Course Outline",
+        controls=[
+            ControlInfo(kind="link", name="Section 9 - Advanced Topics 100%", selector_hint=""),
+            ControlInfo(kind="link", name="Section 8 - Using and Managing Procedures", selector_hint="40%"),
+        ])
+    res = plan_navigation(snap, PageState.OUTLINE, Settings())
+    assert not res.blocked, res.reason
+    assert res.actions[0].button_name == "Section 8 - Using and Managing Procedures"
+
+
+def test_plan_outline_name_only_percent_means_finished():
+    from agent.action_planner import plan_navigation
+
+    snap = PageSnapshot(
+        url="http://course/outline", title="Course", visible_text="Course Outline",
+        controls=[ControlInfo(kind="link", name="Section 9 - Advanced Topics 100%", selector_hint="")])
+    res = plan_navigation(snap, PageState.OUTLINE, Settings())
+    assert res.blocked
+    assert "no unfinished section found" in res.reason
+
+
 async def test_navigate_clicks_section_link(tmp_path):
     s = _settings(tmp_path, "#outline")
     sess = BrowserSession(s)
@@ -388,6 +443,29 @@ async def test_navigate_clicks_section_link(tmp_path):
                          timeout_ms=2000))
         assert res.ok, res.message
         assert page.url.endswith("#lesson1")
+    finally:
+        await sess.close()
+
+
+async def test_observe_sees_name_embedded_percent_and_planner_skips_it(tmp_path):
+    # End to end on the live bug shape: the "100%" lives only inside the
+    # link's accessible name, yet the planner must treat the row as finished.
+    from agent.action_planner import plan_navigation
+
+    s = _settings(tmp_path, "#outline")
+    sess = BrowserSession(s)
+    try:
+        page = await sess.start()
+        await page.goto(FIXTURE.as_uri() + "#outline")
+        snap = await observe(page)
+        nine = [c for c in snap.controls
+                if c.kind == "link" and "Section 9" in (c.name or "")]
+        assert nine, "Section 9 link missing from snapshot"
+        assert "100%" in nine[0].name, nine[0].name
+        res = plan_navigation(snap, PageState.OUTLINE, Settings())
+        assert not res.blocked, res.reason
+        assert "Section 2" in res.actions[0].button_name
+        assert "Section 9" not in res.actions[0].button_name
     finally:
         await sess.close()
 
@@ -430,7 +508,7 @@ async def test_redo_guard_stops_second_pass(tmp_path):
     assert summary["final_state"] == "STOPPED", summary
     assert summary["questions_done"] == 2, summary
     assert summary["quizzes_done"] == 1, summary
-    assert any("already walked into" in (st["error"] or "") for st in summary["steps"]), summary
+    assert any("already finished" in (st["error"] or "") for st in summary["steps"]), summary
 
 
 async def test_outline_all_complete_finishes(tmp_path):
@@ -441,3 +519,118 @@ async def test_outline_all_complete_finishes(tmp_path):
     assert summary["final_state"] == "COMPLETED", summary
     assert summary["questions_done"] == 0
     assert "ACT" not in [st["state"] for st in summary["steps"]]
+
+
+def _shared_db_settings(tmp_path, query="", **over):
+    # Two runs sharing one history file, like two real `python main.py` runs.
+    s = _settings(tmp_path, query, **over)
+    s.database_path = str(tmp_path / "shared.sqlite")
+    return s
+
+
+async def test_finished_section_skipped_across_runs(tmp_path):
+    # Run 1 finishes the section+quiz (progress numbers frozen). Run 2, a
+    # fresh process with the same history file, must NOT walk in again:
+    # no clicks at all, stopped on the recorded finish.
+    s1 = _shared_db_settings(tmp_path, "?staticpct=1#outline")
+    summary1 = await Controller(s1).run()
+    assert summary1["final_state"] == "STOPPED", summary1
+    assert summary1["questions_done"] == 2, summary1
+
+    s2 = _shared_db_settings(tmp_path, "?staticpct=1#outline")
+    summary2 = await Controller(s2).run()
+    assert summary2["final_state"] == "STOPPED", summary2
+    assert summary2["questions_done"] == 0, summary2
+    assert "ACT" not in [st["state"] for st in summary2["steps"]], summary2["steps"]
+    assert any("already finished" in (st["error"] or "") for st in summary2["steps"])
+
+
+async def test_redo_flag_allows_reentry(tmp_path, monkeypatch):
+    # REDO_FINISHED_SECTIONS=true: the recorded finish is ignored and the
+    # section is walked into again (one click proves entry, budget stops it).
+    s1 = _shared_db_settings(tmp_path, "?staticpct=1#outline")
+    summary1 = await Controller(s1).run()
+    assert summary1["final_state"] == "STOPPED", summary1
+
+    monkeypatch.setenv("REDO_FINISHED_SECTIONS", "true")
+    s2 = _shared_db_settings(tmp_path, "?staticpct=1#outline", max_actions=1)
+    summary2 = await Controller(s2).run()
+    assert any(st["state"] == "ACT" and "Section 2" in (st["action"] or "")
+               for st in summary2["steps"]), summary2["steps"]
+
+
+LOOP_FIXTURE = Path(__file__).parent / "fixture" / "journey_loop.html"
+
+
+def _loop_settings(tmp_path, query="", **over):
+    s = Settings()
+    # Start ON the lobby hash: the quiz returns to this exact address after
+    # finishing, and the revisit is detected by address equality.
+    s.target_url = LOOP_FIXTURE.as_uri() + query + "#lobby"
+    s.headless = True
+    s.connection_mode = "launch"
+    s.llm_provider = "mock"
+    s.mock_mode = "auto"
+    s.auto_advance_lessons = True
+    s.action_timeout_ms = 2000
+    s.screenshot_dir = str(tmp_path / "shots")
+    s.database_path = str(tmp_path / "runs.sqlite")
+    for k, v in over.items():
+        setattr(s, k, v)
+    return s
+
+
+def test_plan_lobby_revisit_exits_via_save_progress():
+    from agent.action_planner import plan_navigation
+
+    snap = PageSnapshot(url="http://course/quiz", title="Quiz",
+                        visible_text="Quiz: PL/SQL - Section 7",
+                        controls=[ControlInfo(kind="button", name="Save Progress"),
+                                  ControlInfo(kind="link", name="Take an Assessment")])
+    fresh = plan_navigation(snap, PageState.LOBBY, Settings())
+    assert not fresh.blocked, fresh.reason
+    assert "Take an Assessment" in fresh.actions[0].button_name
+    again = plan_navigation(snap, PageState.LOBBY, Settings(), revisit=True)
+    assert not again.blocked, again.reason
+    assert len(again.actions) == 1
+    assert again.actions[0].type == ActionType.NAVIGATE
+    assert again.actions[0].button_name == "Save Progress"
+
+
+def test_plan_lobby_revisit_without_save_blocked():
+    from agent.action_planner import plan_navigation
+
+    snap = PageSnapshot(url="http://course/quiz", title="Quiz",
+                        visible_text="Quiz: PL/SQL - Section 7",
+                        controls=[ControlInfo(kind="link", name="Take an Assessment")])
+    res = plan_navigation(snap, PageState.LOBBY, Settings(), revisit=True)
+    assert res.blocked
+    assert "Save Progress" in res.reason
+
+
+async def test_full_loop_lobby_exit_to_outline(tmp_path):
+    s = _loop_settings(tmp_path)
+    ctl = Controller(s)
+    summary = await ctl.run()
+    assert summary["final_state"] == "COMPLETED", summary
+    assert summary["questions_done"] == 1, summary
+    takes = [st for st in summary["steps"]
+             if st["state"] == "ACT" and (st["action"] or "").startswith("navigate:Take an Assessment")]
+    assert len(takes) == 1, summary["steps"]
+    saves = [st for st in summary["steps"]
+             if st["state"] == "ACT" and "Save Progress" in (st["action"] or "")]
+    assert len(saves) == 1, summary["steps"]
+    submits = [st for st in summary["steps"]
+               if st["state"] == "ACT" and (st["action"] or "").startswith("click_button:Submit")]
+    assert len(submits) == 1, summary["steps"]
+
+
+async def test_slow_initial_lobby_recovers(tmp_path):
+    # Lobby buttons render 2.5s after first paint: early looks find nothing,
+    # the safe-retry wait covers the gap, and the run still completes.
+    s = _loop_settings(tmp_path, query="?slow=1")
+    ctl = Controller(s)
+    summary = await ctl.run()
+    assert summary["final_state"] == "COMPLETED", summary
+    assert summary["questions_done"] == 1, summary
+    assert any(st["state"] == "CLASSIFY" for st in summary["steps"]), summary["steps"]

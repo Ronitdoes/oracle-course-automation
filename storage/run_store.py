@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import time
 import uuid
@@ -26,7 +27,26 @@ CREATE TABLE IF NOT EXISTS steps (
   verification TEXT, retries INTEGER DEFAULT 0,
   error TEXT DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS finished_sections (
+  course TEXT, section TEXT, finished_at REAL,
+  PRIMARY KEY (course, section)
+);
 """
+
+
+def course_key_for_url(url: str) -> str:
+    """Stable course identifier for an outline address.
+
+    Course outline addresses carry a class-course number after the P14_ID
+    marker (it survives session/checksum rotations, unlike the full address).
+    Plain addresses without one fall back to the full address itself, so
+    local practice pages still get a steady bucket.
+    """
+    m = re.search(r"P14_ID[^:]*:(\d+)", url or "")
+    if m:
+        return m.group(1)
+    base = (url or "").split("#")[0]
+    return base if base else ""
 
 
 class RunStore:
@@ -70,6 +90,23 @@ class RunStore:
         cur2 = self._conn.execute("SELECT state, question_id, answer, action, verification, error FROM steps WHERE run_id=? ORDER BY id", (run_id,))
         run["steps"] = [dict(zip(["state", "question_id", "answer", "action", "verification", "error"], r)) for r in cur2.fetchall()]
         return run
+
+    def record_finished_section(self, course: str, section: str) -> None:
+        """Remember a finished course section (by outline entry name)."""
+        if not course or not section:
+            return
+        self._conn.execute(
+            "INSERT OR REPLACE INTO finished_sections (course, section, finished_at) VALUES (?,?,?)",
+            (course, section, time.time()))
+        self._conn.commit()
+
+    def finished_sections(self, course: str) -> dict[str, float]:
+        """Finished sections for one course: {name: finished_at}."""
+        if not course:
+            return {}
+        cur = self._conn.execute(
+            "SELECT section, finished_at FROM finished_sections WHERE course=?", (course,))
+        return {row[0]: row[1] for row in cur.fetchall()}
 
     def close(self) -> None:
         try:

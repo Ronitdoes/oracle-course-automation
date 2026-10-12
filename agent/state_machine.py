@@ -37,7 +37,7 @@ ALLOWED: dict[AgentState, set[AgentState]] = {
     AgentState.VALIDATE: {AgentState.AWAIT_APPROVAL, AgentState.ACT, AgentState.RECOVER, AgentState.FAILED, AgentState.STOPPED},
     AgentState.AWAIT_APPROVAL: {AgentState.ACT, AgentState.STOPPED, AgentState.RECOVER},
     AgentState.ACT: {AgentState.VERIFY, AgentState.RECOVER, AgentState.STOPPED, AgentState.FAILED},
-    AgentState.NAVIGATE: {AgentState.ACT, AgentState.AWAIT_APPROVAL, AgentState.RECOVER, AgentState.STOPPED, AgentState.FAILED},
+    AgentState.NAVIGATE: {AgentState.ACT, AgentState.AWAIT_APPROVAL, AgentState.RECOVER, AgentState.STOPPED, AgentState.COMPLETED, AgentState.FAILED},
     AgentState.RETURNING: {AgentState.OBSERVE, AgentState.COMPLETED, AgentState.STOPPED, AgentState.FAILED},
     AgentState.VERIFY: {AgentState.OBSERVE, AgentState.COMPLETED, AgentState.RETURNING, AgentState.STOPPED, AgentState.RECOVER, AgentState.FAILED},
     AgentState.RECOVER: {AgentState.OBSERVE, AgentState.STOPPED, AgentState.FAILED},

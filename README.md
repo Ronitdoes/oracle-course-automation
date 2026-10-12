@@ -89,13 +89,27 @@ Safety: allowed-websites list (domain allowlist), practice mode that never submi
 
 With `AUTO_ADVANCE_LESSONS=true` in `.env`, the helper starts from a theory (lesson) page and walks forward by itself:
 
-1. On the course outline it opens the first section that is not at 100% (a missing number counts as unfinished too). If everything is finished — or the next unfinished item is a final exam, which it never starts by itself — it stops and tells you.
+1. On the course outline it opens the first section that is not at 100% (a missing number counts as unfinished too) — section quizzes and final exams alike. If everything is finished it stops and tells you.
 2. On reading pages it clicks **Save and Continue** (or Save Progress).
 3. On the quiz card page it clicks **Take an Assessment**, then **Start** in the pop-up box.
 4. Then it answers questions exactly as in questions-only mode.
-5. When the quiz is done it stops and reports (it does not start the next lesson by itself).
+5. When the quiz is done and the course sends it back to the quiz card, it leaves via **Save Progress** (never starting the same quiz twice) and goes back to the outline for the next unfinished section, until no sections remain. Finished sections are remembered in the history file — even if the outline still shows one open — so it never redoes a finished section. If that ever blocks something it shouldn't, `REDO_FINISHED_SECTIONS=true` turns the memory off.
 
 Rules that keep this safe: it only ever clicks forward buttons — Previous, Return to Course/Exit, and Course are never clicked. If it ever returns to a page it already walked, it stops instead of looping. In preview mode (`DRY_RUN=true`) it lists the planned clicks without clicking; with `REQUIRE_APPROVAL=true` it asks you before each set of clicks. Without the setting (default), it stops on the first theory/quiz-start page and tells you to turn it on.
+
+## Desktop app (Windows)
+
+Minimal editorial GUI over the same engine (`PySide6`):
+
+```bash
+pip install -r requirements.txt
+python -m app.main
+```
+
+Run / History / Settings pages. Approvals appear as dialogs instead of
+terminal prompts. Settings edits `.env` locally; keys are never logged.
+Portable exe: `build_exe.bat` (runs `pyinstaller BrowserAgent.spec`).
+Chromium downloads on first run via `playwright install chromium` if missing.
 
 ## Testing
 

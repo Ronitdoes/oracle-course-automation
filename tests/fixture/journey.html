@@ -17,6 +17,9 @@
     <div><a href="#lesson1" data-next="s-lesson1" data-hash="lesson1" class="sectionLink">Section 0 - Course Resources</a><span class="pct">100%</span></div>
     <div><a href="#lesson1" data-next="s-lesson1" data-hash="lesson1" class="sectionLink">Section 1 - Fundamentals</a><span class="pct">100%</span></div>
     <div><a href="#lesson1" data-next="s-lesson1" data-hash="lesson1" class="sectionLink">Section 2 - Defining Variables and Datatypes</a><span class="pct">40%</span></div>
+    <!-- Percent baked into the accessible name only (no separate number
+         beside the link), as the live course sometimes renders it. -->
+    <div><a href="#lesson1" data-next="s-lesson1" data-hash="lesson1" class="sectionLink" aria-label="Section 9 - Advanced Topics 100%">Section 9 - Advanced Topics</a></div>
   </div>
   <!-- Stage 1: theory lesson slides -->
   <div class="stage" id="s-lesson1">
@@ -149,9 +152,15 @@ document.querySelectorAll(".answerBtn").forEach(btn => {
   });
 });
 // Deep-link straight into a stage (tests use journey.html#lobby).
-const routed = (location.hash || "").replace("#", "");
-if (routed === "lobby") show("s-lobby", "lobby");
-if (routed === "outline") show("s-outline", "outline");
+// Same-document jumps (back button, scripted goto to another hash) must
+// re-render too, like a real full page load would.
+function routeFromHash() {
+  const routed = (location.hash || "").replace("#", "");
+  if (routed === "lobby") show("s-lobby", "lobby");
+  if (routed === "outline") show("s-outline", "outline");
+}
+window.addEventListener("hashchange", routeFromHash);
+routeFromHash();
 </script>
 </main>
 </body>

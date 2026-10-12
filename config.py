@@ -59,6 +59,7 @@ class Settings:
     dry_run: bool = field(default_factory=lambda: _get_bool("DRY_RUN", False))
     require_approval: bool = field(default_factory=lambda: _get_bool("REQUIRE_APPROVAL", False))
     auto_advance_lessons: bool = field(default_factory=lambda: _get_bool("AUTO_ADVANCE_LESSONS", False))
+    redo_finished_sections: bool = field(default_factory=lambda: _get_bool("REDO_FINISHED_SECTIONS", False))
 
     redact_question_text: bool = field(default_factory=lambda: _get_bool("REDACT_QUESTION_TEXT_IN_LOGS", False))
     persist_question_text: bool = field(default_factory=lambda: _get_bool("PERSIST_QUESTION_TEXT", True))

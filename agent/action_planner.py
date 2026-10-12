@@ -35,6 +35,17 @@ def _section_percent(hint: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
+def _trailing_percent(text: str) -> int | None:
+    """Progress number hiding at the end of a link name itself.
+
+    The row lookup usually finds the number beside the link, but live pages
+    sometimes bake it into the link's own accessible name instead
+    ("Section 8 - ... 90%"). Same shape, other place.
+    """
+    m = re.search(r"(\d+)\s*%\s*$", text or "")
+    return int(m.group(1)) if m else None
+
+
 def _outline_rows(snap: PageSnapshot) -> list[tuple[str, int | None]]:
     """(name, percent) for each clickable course row, in page order.
 
@@ -50,27 +61,10 @@ def _outline_rows(snap: PageSnapshot) -> list[tuple[str, int | None]]:
         if not (re.match(r"section\s+\d+", name, re.IGNORECASE) or "final exam" in name.lower()):
             continue
         pct = _section_percent(c.selector_hint)
+        if pct is None:
+            pct = _trailing_percent(name)
         rows.append((name, pct))
     return rows
-
-
-def _first_incomplete_section(snap: PageSnapshot) -> str:
-    """Name of the first course row that is not at 100%, or "".
-
-    The course shows 100% for finished sections and a lower number — or no
-    number at all — for the rest, so anything that is not an explicit 100%
-    counts as unfinished and gets visited first.
-    """
-    for name, pct in _outline_rows(snap):
-        if pct is None or pct < 100:
-            return name
-    return ""
-
-
-def _is_final_exam(name: str) -> bool:
-    # Final exams are higher-stakes than section quizzes (possibly timed or
-    # single-attempt), so the helper never starts one by itself.
-    return "final exam" in (name or "").lower()
 
 
 def section_key(name: str) -> str:
@@ -98,10 +92,23 @@ def _match_button(snap: PageSnapshot, wants: tuple[str, ...]) -> str:
     return ""
 
 
-def plan_navigation(snap: PageSnapshot, page_state: PageState, settings: Settings) -> PlanResult:
-    """Plan forward clicks for a lesson/lobby/outline page. Pure function."""
+def plan_navigation(snap: PageSnapshot, page_state: PageState, settings: Settings,
+                    revisit: bool = False, finished: frozenset[str] = frozenset()) -> PlanResult:
+    """Plan forward clicks for a lesson/lobby/outline page. Pure function.
+
+    revisit=True means this lobby was already left once this run (its quiz
+    was started from here): plan the way OUT (Save Progress) instead of
+    starting the quiz again. finished holds outline entries already finished
+    (recorded in earlier runs): they are skipped, never re-entered.
+    """
     actions: list[Action] = []
-    if page_state == PageState.LOBBY:
+    if page_state == PageState.LOBBY and revisit:
+        leave = _match_button(snap, ("Save Progress",))
+        if not leave:
+            return PlanResult([], blocked=True,
+                              reason="quiz lobby already finished but no Save Progress button to leave with")
+        actions = [Action(type=ActionType.NAVIGATE, button_name=leave, timeout_ms=settings.action_timeout_ms)]
+    elif page_state == PageState.LOBBY:
         take = _match_button(snap, LOBBY_BUTTONS)
         if not take:
             return PlanResult([], blocked=True, reason="quiz start page has no Take an Assessment button")
@@ -116,14 +123,20 @@ def plan_navigation(snap: PageSnapshot, page_state: PageState, settings: Setting
             return PlanResult([], blocked=True, reason="lesson page has no Save and Continue button")
         actions = [Action(type=ActionType.NAVIGATE, button_name=forward, timeout_ms=settings.action_timeout_ms)]
     elif page_state == PageState.OUTLINE:
-        section = _first_incomplete_section(snap)
-        if not section:
+        rows = _outline_rows(snap)
+        open_rows = [(name, pct) for name, pct in rows
+                     if (pct is None or pct < 100) and section_key(name) not in finished]
+        if open_rows:
+            section = open_rows[0][0]
+        elif any(pct is None or pct < 100 for _, pct in rows):
+            done = ", ".join(name for name, pct in rows
+                             if (pct is None or pct < 100))[:200]
+            return PlanResult([], blocked=True,
+                              reason=f"already finished {done}; stopping so it does not redo finished work")
+        else:
             seen = _outline_seen(snap)
             return PlanResult([], blocked=True,
                               reason=f"no unfinished section found on the course outline{(': ' + seen) if seen else ''}")
-        if _is_final_exam(section):
-            return PlanResult([], blocked=True,
-                              reason=f"'{section}' is a final exam; please start it by hand")
         actions = [Action(type=ActionType.NAVIGATE, button_name=section, timeout_ms=settings.action_timeout_ms)]
     else:
         return PlanResult([], blocked=True, reason=f"not a lesson, quiz start, or outline page ({page_state.value})")
