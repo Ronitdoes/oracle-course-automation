@@ -1,7 +1,8 @@
-"""Minimal editorial logo: ink rounded square, paper serif 'B.'.
+"""Minimal editorial logo: ink rounded square, paper serif 'B'.
 
 Drawn in code (no binary assets) so it stays crisp at any size and works
-for the window/taskbar icon plus the in-app wordmark.
+for the window/taskbar icon plus the in-app wordmark. Matches assets/app.ico
+(the exe/installer icon), which is rendered from the same design.
 """
 from __future__ import annotations
 
@@ -18,16 +19,17 @@ def logo_pixmap(size: int) -> QPixmap:
     img.fill(Qt.transparent)
     p = QPainter(img)
     p.setRenderHints(QPainter.Antialiasing | QPainter.TextAntialiasing)
-    radius = side * 0.22
+    radius = side * 0.24
     p.setPen(Qt.NoPen)
     p.setBrush(INK)
     p.drawRoundedRect(0, 0, side, side, radius, radius)
-    font = QFont("Georgia", int(side * 0.52), QFont.Bold)
+    # Period-free, oversized glyph: stays legible down to 16px taskbar size.
+    font = QFont("Georgia", int(side * (0.60 if side <= 32 else 0.56)), QFont.Bold)
     font.setStyleHint(QFont.Serif)
     p.setFont(font)
     p.setPen(PAPER)
     # Slight upward nudge so the serif B sits optically centered.
-    p.drawText(0, -int(side * 0.04), side, side, Qt.AlignCenter, "B.")
+    p.drawText(0, -int(side * 0.04), side, side, Qt.AlignCenter, "B")
     p.end()
     return QPixmap.fromImage(img)
 
