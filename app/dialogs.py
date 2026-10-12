@@ -178,9 +178,7 @@ class SetupWizard(QDialog):
         self._key_hint.setWordWrap(True)
         lay.addWidget(self._key_hint)
 
-        self._base = QLineEdit()
-        lay.addWidget(QLabel("Base URL (advanced — leave as suggested)"))
-        lay.addWidget(self._base)
+        self._base_default = (initial.get("LLM_BASE_URL") or "").strip()
 
         run = QLabel("RUN")
         run.setObjectName("Section")
@@ -200,8 +198,6 @@ class SetupWizard(QDialog):
         self._model.setText((initial.get("MODEL_ID") or "").strip()
                             or PROVIDER_DEFAULTS[provider]["model"])
         self._key.setText((initial.get("LLM_API_KEY") or "").strip())
-        self._base.setText((initial.get("LLM_BASE_URL") or "").strip()
-                           or PROVIDER_DEFAULTS[provider]["base"])
         try:
             self._max_q.setValue(int(str(initial.get("MAX_QUESTIONS") or "500").strip() or "500"))
         except ValueError:
@@ -225,12 +221,19 @@ class SetupWizard(QDialog):
         save.clicked.connect(self._on_save)
 
     # -- logic (UI-free, unit-tested) --
+    def _base_url(self) -> str:
+        """Kept out of the UI: existing value wins, else the provider default."""
+        if self._base_default:
+            return self._base_default
+        name = self._provider.currentText().strip().lower()
+        return PROVIDER_DEFAULTS.get(name, PROVIDER_DEFAULTS["mock"])["base"]
+
     def values(self) -> dict[str, str]:
         return {
             "LLM_PROVIDER": self._provider.currentText().strip(),
             "MODEL_ID": self._model.text().strip(),
             "LLM_API_KEY": self._key.text().strip(),
-            "LLM_BASE_URL": self._base.text().strip(),
+            "LLM_BASE_URL": self._base_url(),
             "MAX_QUESTIONS": str(self._max_q.value()),
             "AUTO_ADVANCE_LESSONS": "true" if self._lessons.isChecked() else "false",
             "REQUIRE_APPROVAL": "true" if self._approval.isChecked() else "false",
@@ -254,8 +257,6 @@ class SetupWizard(QDialog):
         name = (name or "").strip().lower()
         if name in PROVIDER_DEFAULTS and not self._model.text().strip():
             self._model.setText(PROVIDER_DEFAULTS[name]["model"])
-        if name in PROVIDER_DEFAULTS and not self._base.text().strip():
-            self._base.setText(PROVIDER_DEFAULTS[name]["base"])
         self._refresh_provider_hint()
 
     def _refresh_provider_hint(self) -> None:

@@ -49,11 +49,13 @@ QPushButton#Ghost {{ background: {SURFACE}; color: {INK}; border: 1px solid {HAI
 QPushButton#Ghost:hover {{ border-color: {INK}; }}
 QLineEdit, QSpinBox, QComboBox, QTextEdit {{
   background: {SURFACE}; border: 1px solid {HAIRLINE}; border-radius: 6px;
-  padding: 8px 10px; selection-background-color: {INK}; }}
+  padding: 8px 10px; selection-background-color: {INK}; selection-color: {PAPER}; }}
 QLineEdit:focus, QSpinBox:focus, QComboBox:focus {{ border-color: {INK}; }}
 QTableWidget {{ background: {SURFACE}; border: 1px solid {HAIRLINE}; border-radius: 6px;
   gridline-color: {HAIRLINE}; alternate-background-color: {PAPER}; }}
 QTableWidget::item {{ padding: 4px; }}
+QTableWidget::item:selected, QListWidget::item:selected {{
+  background: {INK}; color: {PAPER}; }}
 QHeaderView::section {{ background: {PAPER}; color: {MUTED}; border: none;
   border-bottom: 1px solid {HAIRLINE}; padding: 8px; font-size: 11px;
   font-weight: 600; text-transform: uppercase; }}
