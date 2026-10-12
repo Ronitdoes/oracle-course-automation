@@ -50,6 +50,8 @@ def main() -> int:
         example = bundled_path(base, ".env.example")
         if not env.exists() and example.exists():
             env.write_text(example.read_text(encoding="utf-8"), encoding="utf-8")
+            # The window turns this into the first-time setup wizard.
+            os.environ["BROWSER_AGENT_FIRST_RUN"] = "1"
     except Exception:
         pass
 

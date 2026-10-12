@@ -120,8 +120,10 @@ buildable alone via `build_exe.bat`) and then the real installer
 (`dist-installer\BrowserAgent-Setup-*.exe`, needs the free Inno Setup once).
 The installer is per-user (no admin rights), adds a Start Menu entry with an
 optional desktop icon, and registers an uninstaller. First run copies
-`.env.example` to `.env` by itself; your settings are never overwritten by
-reinstalls. Normal use drives your own Chrome (no browser download needed);
+`.env.example` to `.env` by itself and opens a setup wizard that asks for
+your AI key (with a link to where you get one) plus the basic run settings;
+your settings are never overwritten by reinstalls. Normal use drives your
+own Chrome (no browser download needed);
 if launch-mode ever needs Chromium, the app's Install button fetches it into
 your own profile folder.
 

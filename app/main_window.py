@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QStackedWidget, QStatusBar, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
-from app.dialogs import ApprovalDialog
+from app.dialogs import ApprovalDialog, SetupWizard
 from app.env_store import FIELD_SPECS, GROUPS, bool_to_str, bundled_path, load_env, save_env, str_to_bool
 from app.logo import build_icon, logo_pixmap
 from app.theme import pill_style
@@ -224,6 +224,10 @@ class MainWindow(QMainWindow):
         self._flush.setInterval(200)
         self._flush.timeout.connect(self._flush_pending)
         self._load_env_into_run_bar()
+        if os.environ.pop("BROWSER_AGENT_FIRST_RUN", "") == "1":
+            # Fresh install: ask for the AI key + basic setup once the
+            # window is up instead of failing later with a missing key.
+            QTimer.singleShot(400, lambda: self._open_setup(first_run=True))
 
     # ============ navigation ============
     def _goto(self, key: str):
@@ -261,11 +265,15 @@ class MainWindow(QMainWindow):
         self._btn_start = QPushButton("Start")
         self._btn_start.setObjectName("Primary")
         self._btn_start.clicked.connect(self.start_run)
+        self._btn_setup = QPushButton("Setup")
+        self._btn_setup.setObjectName("Ghost")
+        self._btn_setup.clicked.connect(lambda: self._open_setup())
         self._btn_stop = QPushButton("Stop")
         self._btn_stop.setObjectName("Ghost")
         self._btn_stop.setEnabled(False)
         self._btn_stop.clicked.connect(self.stop_run)
         top.addWidget(self._btn_start)
+        top.addWidget(self._btn_setup)
         top.addWidget(self._btn_stop)
         lay.addLayout(top)
 
@@ -511,6 +519,17 @@ class MainWindow(QMainWindow):
         ok = dlg.exec() == dlg.Accepted
         self._append_log(f"approval ({payload.get('kind')}): {'approved' if ok else 'rejected'}")
         self._worker.resolve_approval(ok)
+
+    def _open_setup(self, first_run: bool = False):
+        """First-time (or re-run) setup: AI key + basic settings into .env."""
+        dlg = SetupWizard(self._env_path(), load_env(self._env_path()),
+                          first_run=first_run, parent=self)
+        if dlg.exec() == dlg.Accepted:
+            for k, v in dlg.values().items():
+                os.environ[k] = v
+            self._load_env_into_run_bar()
+            self._append_log("— setup saved to .env")
+            self.statusBar().showMessage("Setup saved.")
 
     def _on_finished(self, summary: dict):
         self._run_active = False

@@ -114,3 +114,76 @@ def test_steps_and_logs_render_batched():
     assert "0 answers" in w._sub.text() and "13 model calls" in w._sub.text()
     assert "page did not change" in w._sub.text()
     w.close()
+
+def _offscreen_app():
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    return QApplication.instance() or QApplication([])
+
+
+def test_setup_wizard_steers_fresh_install_to_real_key(tmp_path):
+    """Fresh installs default to gemini (not mock) and demand a key."""
+    _offscreen_app()
+    from app.dialogs import SetupWizard
+
+    dlg = SetupWizard(tmp_path / ".env",
+                      {"LLM_PROVIDER": "mock", "MODEL_ID": "", "LLM_API_KEY": "",
+                       "LLM_BASE_URL": "", "MAX_QUESTIONS": "20",
+                       "AUTO_ADVANCE_LESSONS": "false", "REQUIRE_APPROVAL": "false"},
+                      first_run=True)
+    try:
+        v = dlg.values()
+        assert v["LLM_PROVIDER"] == "gemini"
+        assert v["MODEL_ID"] == "gemini-2.0-flash"
+        assert "aistudio" in dlg._key_hint.text()
+        assert dlg.validate() == "missing-key"
+        dlg._key.setText("test-key-123")
+        assert dlg.validate() == ""
+        dlg.save()
+        text = (tmp_path / ".env").read_text(encoding="utf-8")
+        assert "LLM_PROVIDER=gemini" in text
+        assert "LLM_API_KEY=test-key-123" in text
+    finally:
+        dlg.close()
+
+
+def test_setup_wizard_mock_needs_no_key(tmp_path):
+    _offscreen_app()
+    from app.dialogs import SetupWizard
+
+    dlg = SetupWizard(tmp_path / ".env", {"LLM_PROVIDER": "mock"}, first_run=False)
+    try:
+        assert dlg.values()["LLM_PROVIDER"] == "mock"
+        assert dlg.validate() == ""
+    finally:
+        dlg.close()
+
+
+def test_setup_wizard_provider_switch_suggests_model():
+    _offscreen_app()
+    from app.dialogs import SetupWizard
+    from pathlib import Path as _P
+
+    dlg = SetupWizard(_P("dummy.env"), {"LLM_PROVIDER": "mock", "MODEL_ID": "x"})
+    try:
+        dlg._model.clear()
+        dlg._provider.setCurrentText("openai")
+        assert dlg.values()["MODEL_ID"] == "gpt-4o-mini"
+    finally:
+        dlg.close()
+
+
+def test_main_window_has_setup_button():
+    _offscreen_app()
+    from app.main_window import MainWindow
+    from app.theme import apply_theme
+    from PySide6.QtWidgets import QApplication
+
+    apply_theme(QApplication.instance())
+    w = MainWindow()
+    try:
+        assert w._btn_setup is not None
+        assert w._btn_setup.text() == "Setup"
+    finally:
+        w.close()
